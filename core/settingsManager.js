@@ -30,6 +30,10 @@ const defaultSettings = {
 [Node 1: Unresolved] 剧情节点1的描述。
 [Node 2: Unresolved] 剧情节点2的描述。
 ...`,
+    // 世界书条目配置
+    entryKeywords: ["剧情", "plot", "大纲", "故事", "情节"],
+    entryPosition: 4,  // 0=before_char, 1=after_char, 2=top, 3=bottom, 4=@depth
+    entryDepth: 1,     // 1-999
 };
 
 /**
@@ -74,6 +78,9 @@ export function initializeSettings() {
         'ape_presence_penalty': 'presencePenalty',
         'ape_frequency_penalty': 'frequencyPenalty',
         'ape_plot_master_prompt': 'plotMasterPrompt',
+        'ape_entry_keywords': 'entryKeywords',
+        'ape_entry_position': 'entryPosition',
+        'ape_entry_depth': 'entryDepth',
     };
 
     // Function to save all settings from UI
@@ -82,7 +89,17 @@ export function initializeSettings() {
         for (const [elementId, key] of Object.entries(mapping)) {
             const element = document.getElementById(elementId);
             if (element) {
-                newSettings[key] = element.type === 'checkbox' ? element.checked : element.value;
+                if (element.type === 'checkbox') {
+                    newSettings[key] = element.checked;
+                } else if (key === 'entryKeywords') {
+                    // 特殊处理：将逗号分隔的字符串转换为数组
+                    newSettings[key] = element.value.split(',').map(k => k.trim()).filter(k => k);
+                } else if (key === 'entryPosition' || key === 'entryDepth') {
+                    // 转换为数字
+                    newSettings[key] = parseInt(element.value) || defaultSettings[key];
+                } else {
+                    newSettings[key] = element.value;
+                }
             }
         }
         saveSettings(newSettings);
@@ -94,6 +111,9 @@ export function initializeSettings() {
         if (element) {
             if (element.type === 'checkbox') {
                 element.checked = settings[key];
+            } else if (key === 'entryKeywords') {
+                // 特殊处理：将数组转换为逗号分隔的字符串
+                element.value = Array.isArray(settings[key]) ? settings[key].join(',') : settings[key];
             } else {
                 element.value = settings[key];
             }

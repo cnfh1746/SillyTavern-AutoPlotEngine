@@ -78,6 +78,40 @@
         </div>
     </fieldset>
 
+    <fieldset class="settings-group">
+        <legend><i class="fas fa-book"></i> 世界书条目配置</legend>
+        <div class="ape_settings_block">
+            <label for="ape_entry_keywords">触发关键词</label>
+            <input id="ape_entry_keywords" type="text" class="text_pole" placeholder="剧情,plot,大纲,故事,情节" />
+            <small class="notes">用逗号分隔多个关键词。当对话中出现这些关键词时，世界书条目会被触发。</small>
+        </div>
+        <div class="ape_settings_block">
+            <label for="ape_entry_position">插入位置</label>
+            <select id="ape_entry_position" class="text_pole">
+                <option value="0">📌 角色定义之前 (Before Char)</option>
+                <option value="1">📌 角色定义之后 (After Char)</option>
+                <option value="2">⬆️ 顶部 (Top)</option>
+                <option value="3">⬇️ 底部 (Bottom)</option>
+                <option value="4" selected>⚙️ 在指定深度 (@ Depth)</option>
+            </select>
+            <small class="notes">选择世界书条目在上下文中的插入位置。推荐使用 "⚙️ 在指定深度" 配合深度设置。</small>
+        </div>
+        <div class="ape_settings_block">
+            <label for="ape_entry_depth">插入深度</label>
+            <input id="ape_entry_depth" type="number" class="text_pole" min="0" max="999" step="1" value="1" />
+            <small class="notes">当位置设置为 "⚙️ 在指定深度" 时生效。深度1表示在最靠近对话的位置，数字越大越远离对话。</small>
+        </div>
+        <div class="ape_settings_block" style="background: #2a2a2a; padding: 10px; border-radius: 4px; margin-top: 10px;">
+            <strong>💡 配置说明</strong>
+            <ul style="margin: 5px 0; padding-left: 20px; font-size: 12px;">
+                <li><strong>蓝灯 @齿轮 D1</strong>：位置=⚙️在指定深度, 深度=1 (推荐配置)</li>
+                <li><strong>蓝灯 📌角色后</strong>：位置=📌角色定义之后, 深度=任意</li>
+                <li><strong>蓝灯 ⬆️顶部</strong>：位置=⬆️顶部, 深度=任意</li>
+            </ul>
+            <small class="notes">提示：蓝灯表示条目始终激活（constant=true），不受关键词限制。</small>
+        </div>
+    </fieldset>
+
     <div class="ape_footer">
         <small class="notes">所有设置将在关闭此面板时自动保存。</small>
     </div>
