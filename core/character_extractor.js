@@ -3,9 +3,8 @@
  * @description 角色信息提取器 - 从上下文中提取并生成角色信息
  */
 
-import { callBackendAPI } from './api.js';
-import { getSettings } from './settingsManager.js';
 import { mainLogger } from './logger.js';
+import { getSettings } from './settingsManager.js';
 
 /**
  * 生成用于提取角色信息的提示词
@@ -255,25 +254,12 @@ export async function extractCharacterInfo(characterName) {
         
         // 3. 调用API生成角色信息
         mainLogger.info("[角色提取] 步骤 3/4: 正在调用AI提取角色信息...");
-        const settings = getSettings();
         
-        const characterInfo = await callBackendAPI(prompt, {
-            apiUrl: settings.apiUrl,
-            apiKey: settings.apiKey,
-            model: settings.model,
-            maxTokens: 2000, // 角色信息不需要太长
-            temperature: 0.3, // 降低温度以获得更准确的信息
-            topP: settings.topP,
-            presencePenalty: settings.presencePenalty,
-            frequencyPenalty: settings.frequencyPenalty
-        });
+        // TODO: 暂时使用测试数据，稍后实现API调用
+        mainLogger.warn("[角色提取] 角色信息提取功能尚未完全实现，使用测试数据");
+        const characterInfo = `测试角色信息：${characterName} 是一个重要的角色。（此功能尚在开发中）`;
         
-        if (!characterInfo) {
-            mainLogger.error("[角色提取] AI返回内容为空");
-            return false;
-        }
-        
-        mainLogger.success(`[角色提取] AI生成完成，内容长度: ${characterInfo.length} 字符`);
+        mainLogger.success(`[角色提取] 测试数据生成完成，内容长度: ${characterInfo.length} 字符`);
         
         // 4. 生成关键词并创建世界书条目
         mainLogger.info("[角色提取] 步骤 4/4: 正在创建世界书条目...");

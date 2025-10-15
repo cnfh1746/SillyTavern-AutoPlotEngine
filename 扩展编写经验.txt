@@ -1,0 +1,125 @@
+# SillyTavern 扩展编写核心经验总结
+
+本文档记录了在开发"自动剧情引擎"扩展过程中遇到的几个关键问题及其最终解决方案，可供未来开发参考。
+
+---
+
+### 问题一：扩展在列表中显示"已安装"，但左侧配置菜单无入口
+
+这是最常见也最棘手的新手问题，通常由两个原因叠加导致。
+
+**症状：**
+- 扩展管理中能看到插件，但左侧扩展列表中没有出现对应的配置入口。
+- 或者，入口出现了，但点击后配置面板不显示。
+
+**根本原因与解决方案：**
+
+1.  **【核心】文件夹命名问题**：
+    *   **问题**：SillyTavern 通过 Web 服务器加载扩展资源（如 `settings.html`）。如果扩展的根文件夹名称包含**非 ASCII 字符（如中文）**，Web 服务器很可能无法正确解析 URL 路径，导致 `$.get()` 或 `fetch()` 请求 `settings.html` 时返回 404 Not Found 错误。
+    *   **解决方案**：**必须**确保扩展的根文件夹名称是纯英文/ASCII 字符，且不含空格。最佳实践是使其与 `manifest.json` 中的 `name` 字段保持一致或相关。
+    *   **示例**：我们将 `自动剧情引擎` 重命名为 `SillyTavern-AutoPlotEngine`，问题立刻解决。
+
+2.  **【核心】UI 挂载与折叠逻辑错误**：
+    *   **问题**：错误地认为应该自己处理整个面板的显示和隐藏。例如，给 `settings.html` 的根 `<div>` 添加 `class="settings-panel"` 并手动控制其 `display` 样式，这会与 SillyTavern 的全局脚本产生冲突，导致 UI 无法渲染或行为异常（如点击后立即消失）。
+    *   **解决方案**：**严格遵循 SillyTavern 的 `inline-drawer` 模式**。这是在"扩展"标签页下显示可折叠面板的标准方法。
+        *   在 `drawer.js` 中，创建一个包含 `.inline-drawer-toggle` (标题) 和 `.inline-drawer-content` (内容区) 的 HTML 框架。
+        *   将这个框架挂载到 `#extensions_settings2` 容器中。
+        *   使用 `$.get()` 异步加载 `settings.html` 的内容，并将其**注入**到 `.inline-drawer-content` 中。
+        *   **不要**为 `.inline-drawer-toggle` 手动绑定 `click` 事件。SillyTavern 的全局脚本会自动处理所有该类名元素的折叠/展开逻辑。
+
+---
+
+### 问题二：API 请求失败，特别是获取模型列表
+
+**症状：**
+- 在设置面板中点击"获取模型"按钮，提示"请求失败"，浏览器控制台可能报告 CORS 错误或网络错误。
+
+**根本原因与解决方案：**
+
+1.  **【核心】跨源资源共享 (CORS) 策略**：
+    *   **问题**：从浏览器脚本 (运行在 `127.0.0.1` 域) 直接 `fetch` 一个外部 API 地址（如 `api.openai.com`），会受到浏览器的同源策略限制。除非目标服务器的响应头中包含正确的 CORS 许可，否则请求会被浏览器阻止。
+    *   **错误尝试**：自行猜测并使用 SillyTavern 的 `/api/reverse-proxy`。虽然思路是对的（利用后端代理），但如果没有完全理解其工作方式，同样会失败。
+    *   **解决方案**：**研究并复制一个已知能正常工作的实现**。我们参考了"剧情优化"项目的 `api.js`，发现它对于 OpenAI 兼容的接口，采用的是**前端直接请求**的模式，但其 URL 处理非常规范。
+
+2.  **URL 端点处理不规范**：
+    *   **问题**：简单地在用户输入的 URL 后面拼接 `/v1/models`，可能会因为用户输入了 `.../v1` 或 `.../` 等不同格式而产生错误的最终 URL。
+    *   **解决方案**：在拼接前，对用户输入的 URL 进行规范化处理。
+        ```javascript
+        // 摘自最终的 plot_engine.js
+        let modelsUrl = apiUrl.replace(/\/$/, ''); // 移除末尾的斜杠
+        // 如果 URL 以 /chat/completions 结尾，则替换为 /models
+        if (modelsUrl.endsWith('/chat/completions')) {
+            modelsUrl = modelsUrl.replace(/\/chat\/completions$/, '/models');
+        } 
+        // 否则，如果 URL 不以 /models 结尾，则添加 /models
+        else if (!modelsUrl.endsWith('/models')) {
+            modelsUrl += '/models';
+        }
+        ```
+        这种健壮的 URL 处理方式，确保了无论用户输入何种格式的基础 URL，我们总能请求到正确的 `/models` 端点。
+
+---
+
+### 问题三：世界书操作 - 如何正确写入角色卡世界书
+
+**症状：**
+- 代码调用了 `createNewWorldInfo()` 创建了独立的世界书文件，但剧情大纲没有出现在角色卡的世界书中。
+- 日志显示"世界书已更新"，但在 UI 中找不到对应的条目。
+
+**根本原因与解决方案：**
+
+1.  **【核心】理解世界书的归属关系**：
+    *   **问题**：误以为应该为剧情大纲创建一个独立的世界书文件（如 `宏观剧情.json`）。这种做法虽然技术上可行，但不符合 SillyTavern 的使用习惯——用户期望剧情信息直接出现在当前角色卡的世界书中。
+    *   **解决方案**：使用 **TavernHelper API** 获取当前角色卡的主世界书，然后在该世界书中创建/更新条目。
+
+2.  **【核心】使用 TavernHelper.getCurrentCharPrimaryLorebook()**：
+    *   **关键代码**：
+        ```javascript
+        const { toastr, TavernHelper } = window;
+        
+        // 获取当前角色卡的主世界书名称
+        const LOREBOOK_NAME = await TavernHelper.getCurrentCharPrimaryLorebook();
+        
+        if (!LOREBOOK_NAME) {
+            throw new Error("当前角色没有绑定世界书，请先为角色卡设置主世界书");
+        }
+        
+        // 加载该世界书
+        const bookData = await loadWorldInfo(LOREBOOK_NAME);
+        
+        // 在该世界书中创建或更新条目
+        const existingEntry = Object.values(bookData.entries || {}).find(
+            entry => entry.comment && entry.comment.startsWith("自动剧情大纲")
+        );
+        
+        if (existingEntry) {
+            // 更新现有条目
+            existingEntry.content = outlineContent;
+        } else {
+            // 创建新条目
+            const newEntry = createWorldInfoEntry(LOREBOOK_NAME, bookData);
+            Object.assign(newEntry, {
+                comment: "自动剧情大纲",
+                content: outlineContent,
+                key: ["剧情", "plot", "大纲"],
+                constant: true,
+                disable: false
+            });
+        }
+        
+        // 保存世界书
+        await saveWorldInfo(LOREBOOK_NAME, bookData, true);
+        ```
+
+3.  **使用前提**：
+    *   用户必须先为角色卡绑定一个主世界书（在角色卡设置界面操作）。
+    *   如果角色卡没有绑定世界书，代码会抛出友好的错误提示。
+
+4.  **参考来源**：
+    *   通过研究 `参考项目/CharacterWorldBook/` 目录下的脚本发现了 TavernHelper API 的用法。
+    *   该 API 是 SillyTavern 提供的标准接口，专门用于获取角色卡相关的世界书信息。
+
+---
+
+**总结：**
+开发 SillyTavern 扩展时，遇到问题应首先**参考官方文档或已知能工作的其他扩展**，而不是凭空猜测。UI 交互、API 请求和世界书操作是三大"深坑"，模仿现有模式是最高效、最可靠的解决路径。特别是对于世界书操作，应该优先使用 TavernHelper API 来获取角色卡相关的资源，而不是创建独立的全局资源。
