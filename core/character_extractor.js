@@ -97,6 +97,79 @@ function getCurrentContext() {
 }
 
 /**
+ * 调用API生成角色信息
+ * @param {Object} settings - 设置对象
+ * @param {string} prompt - 提示词
+ * @returns {Promise<string|null>} 生成的角色信息或null
+ */
+async function callCharacterExtractionAPI(settings, prompt) {
+    if (!settings.apiUrl || !settings.apiKey || !settings.model) {
+        mainLogger.error("[角色提取] API配置不完整");
+        toastr.error("API配置不完整，请在设置中配置API信息", "角色提取");
+        return null;
+    }
+    
+    // 规范化URL
+    let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
+    if (!apiUrl.endsWith('/chat/completions')) {
+        apiUrl += '/chat/completions';
+    }
+    
+    // 构建请求体
+    const body = {
+        model: settings.model,
+        messages: [
+            { 
+                role: 'system', 
+                content: '你是一个专业的角色分析师，擅长从对话和描述中提取和整理角色信息。请仔细分析提供的内容，生成详细准确的角色描述。'
+            },
+            { role: 'user', content: prompt }
+        ],
+        temperature: parseFloat(settings.temperature) || 0.7,
+        max_tokens: parseInt(settings.maxTokens) || 4000,
+        top_p: parseFloat(settings.topP) || 1.0,
+        presence_penalty: parseFloat(settings.presencePenalty) || 0,
+        frequency_penalty: parseFloat(settings.frequencyPenalty) || 0,
+        stream: false,
+    };
+    
+    mainLogger.info(`[角色提取] 正在调用API: ${apiUrl}`);
+    mainLogger.info(`[角色提取] 使用模型: ${settings.model}`);
+    
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        
+        if (content && typeof content === 'string') {
+            mainLogger.success(`[角色提取] API调用成功，生成内容长度: ${content.length} 字符`);
+            return content;
+        } else {
+            mainLogger.warn("[角色提取] API返回成功但内容为空或格式无效");
+            return null;
+        }
+
+    } catch (error) {
+        mainLogger.error("[角色提取] API调用失败", error.message);
+        toastr.error(`API调用失败: ${error.message}`, "角色提取");
+        return null;
+    }
+}
+
+/**
  * 创建或更新角色世界书条目（使用与plot_engine相同的方法）
  * @param {string} characterName - 角色名称
  * @param {string} content - 角色信息内容
@@ -229,11 +302,16 @@ export async function extractCharacterInfo(characterName) {
         // 3. 调用API生成角色信息
         mainLogger.info("[角色提取] 步骤 3/4: 正在调用AI提取角色信息...");
         
-        // TODO: 暂时使用测试数据，稍后实现API调用
-        mainLogger.warn("[角色提取] 角色信息提取功能尚未完全实现，使用测试数据");
-        const characterInfo = `测试角色信息：${characterName} 是一个重要的角色。（此功能尚在开发中）`;
+        const settings = getSettings();
+        const characterInfo = await callCharacterExtractionAPI(settings, prompt);
         
-        mainLogger.success(`[角色提取] 测试数据生成完成，内容长度: ${characterInfo.length} 字符`);
+        if (!characterInfo) {
+            mainLogger.error("[角色提取] AI未返回有效的角色信息");
+            toastr.error("AI未返回有效的角色信息", "角色提取");
+            return false;
+        }
+        
+        mainLogger.success(`[角色提取] 角色信息生成完成，内容长度: ${characterInfo.length} 字符`);
         
         // 4. 生成关键词并创建世界书条目
         mainLogger.info("[角色提取] 步骤 4/4: 正在创建世界书条目...");
