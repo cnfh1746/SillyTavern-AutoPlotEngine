@@ -5,6 +5,9 @@
 
 import { mainLogger } from './logger.js';
 import { getSettings } from './settingsManager.js';
+import { loadWorldInfo, saveWorldInfo, createWorldInfoEntry } from "/scripts/world-info.js";
+
+const { toastr, TavernHelper } = window;
 
 /**
  * 生成用于提取角色信息的提示词
@@ -94,7 +97,7 @@ function getCurrentContext() {
 }
 
 /**
- * 创建或更新角色世界书条目
+ * 创建或更新角色世界书条目（使用与plot_engine相同的方法）
  * @param {string} characterName - 角色名称
  * @param {string} content - 角色信息内容
  * @param {Array<string>} keywords - 触发关键词
@@ -103,123 +106,94 @@ async function createCharacterEntry(characterName, content, keywords) {
     mainLogger.info(`[角色提取] 正在创建世界书条目: ${characterName}`);
     
     try {
-        const context = window.SillyTavern.getContext();
+        // Step 1: 获取当前角色卡的主世界书（与plot_engine完全相同的方法）
+        mainLogger.info("[角色提取] 正在获取当前角色卡的主世界书...");
         
-        // 获取或创建角色世界书
-        let bookName = `角色信息_${characterName}`;
-        let worldInfoData = context.worldInfoData;
-        
-        if (!worldInfoData) {
-            mainLogger.error("[角色提取] 无法访问世界书数据");
-            return false;
+        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
+            throw new Error("TavernHelper API 不可用，无法获取角色卡世界书");
         }
         
-        // 查找是否存在同名世界书
-        let targetBook = null;
-        for (let name in worldInfoData) {
-            if (name === bookName) {
-                targetBook = worldInfoData[name];
-                break;
+        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
+        
+        if (!lorebookName) {
+            throw new Error("当前角色没有绑定世界书，请先为角色卡设置主世界书");
+        }
+        
+        mainLogger.info(`[角色提取] 找到角色卡主世界书: ${lorebookName}`);
+
+        // Step 2: 加载世界书数据
+        mainLogger.info(`[角色提取] 正在加载世界书"${lorebookName}"...`);
+        const bookData = await loadWorldInfo(lorebookName);
+        
+        if (!bookData) {
+            throw new Error(`无法加载世界书"${lorebookName}"`);
+        }
+        
+        const entriesCount = Object.keys(bookData.entries || {}).length;
+        mainLogger.info(`[角色提取] 世界书加载成功，当前条目数: ${entriesCount}`);
+
+        // Step 3: 查找是否已存在该角色的条目
+        const commentPrefix = `角色信息: ${characterName}`;
+        let existingEntry = null;
+        
+        if (bookData.entries) {
+            existingEntry = Object.values(bookData.entries).find(
+                entry => entry && entry.comment && entry.comment.startsWith(commentPrefix)
+            );
+        }
+        
+        if (existingEntry) {
+            // 更新现有条目
+            mainLogger.info(`[角色提取] 找到现有条目 (uid: ${existingEntry.uid})，正在更新...`);
+            existingEntry.content = content;
+            existingEntry.key = keywords;
+            existingEntry.comment = `${commentPrefix} - ${new Date().toISOString()}`;
+            existingEntry.disable = false;
+            mainLogger.success(`[角色提取] 条目更新完成`);
+        } else {
+            // 创建新条目
+            mainLogger.info(`[角色提取] 未找到现有条目，正在创建新条目...`);
+            const newEntry = createWorldInfoEntry(lorebookName, bookData);
+            
+            mainLogger.info(`[角色提取] createWorldInfoEntry返回的条目uid: ${newEntry.uid}`);
+            
+            // 设置条目属性
+            Object.assign(newEntry, {
+                comment: `${commentPrefix} - ${new Date().toISOString()}`,
+                content: content,
+                key: keywords,
+                constant: false,  // 绿灯模式：按关键词触发
+                selectiveLogic: 0,
+                position: 0,  // Before Char（角色定义之前）
+                depth: 4,
+                disable: false,
+                order: 100,
+                probability: 100,
+            });
+            
+            // 确保条目在 bookData.entries 中
+            if (bookData.entries && !bookData.entries[newEntry.uid]) {
+                mainLogger.warn(`[角色提取] 条目未自动添加到entries，手动添加 (uid: ${newEntry.uid})`);
+                bookData.entries[newEntry.uid] = newEntry;
+            } else {
+                mainLogger.info(`[角色提取] 条目已在entries中 (uid: ${newEntry.uid})`);
             }
+            
+            const newEntriesCount = Object.keys(bookData.entries || {}).length;
+            mainLogger.success(`[角色提取] 新条目创建完成，当前总条目数: ${newEntriesCount}`);
         }
-        
-        // 如果没有找到，使用主世界书（角色卡世界书）
-        if (!targetBook) {
-            mainLogger.info(`[角色提取] 使用角色卡主世界书`);
-            const charId = context.characterId;
-            if (context.characters && context.characters[charId]) {
-                const char = context.characters[charId];
-                if (char.data && char.data.character_book) {
-                    targetBook = char.data.character_book;
-                }
-            }
-        }
-        
-        if (!targetBook) {
-            mainLogger.error("[角色提取] 无法找到或创建世界书");
-            return false;
-        }
-        
-        // 创建新条目
-        const newEntry = {
-            uid: Date.now(),
-            key: keywords,
-            keysecondary: [],
-            comment: `角色信息: ${characterName}`,
-            content: content,
-            constant: false, // 绿灯：按触发词触发
-            selective: true,
-            selectiveLogic: 0,
-            addMemo: false,
-            order: 100,
-            position: 0, // 0 = Before Char（角色定义之前）
-            disable: false,
-            excludeRecursion: false,
-            preventRecursion: false,
-            delayUntilRecursion: false,
-            probability: 100,
-            useProbability: true,
-            depth: 4,
-            group: "",
-            groupOverride: false,
-            groupWeight: 100,
-            scanDepth: null,
-            caseSensitive: false,
-            matchWholeWords: false,
-            useGroupScoring: false,
-            automationId: "",
-            role: 0,
-            vectorized: false,
-            sticky: 0,
-            cooldown: 0,
-            delay: 0
-        };
-        
-        // 添加到世界书
-        if (!targetBook.entries) {
-            targetBook.entries = {};
-        }
-        
-        targetBook.entries[newEntry.uid] = newEntry;
-        
-        mainLogger.success(`[角色提取] 条目创建成功 (uid: ${newEntry.uid})`);
-        
-        // 保存世界书
-        await saveWorldInfo();
-        
-        // 刷新UI
-        if (window.setWorldInfoButtonClass) {
-            window.setWorldInfoButtonClass(context.chat_id);
-        }
+
+        // Step 4: 保存世界书
+        mainLogger.info(`[角色提取] 正在保存世界书...`);
+        await saveWorldInfo(lorebookName, bookData, true);
+        mainLogger.success(`[角色提取] 角色信息已成功写入世界书！`);
         
         return true;
         
     } catch (error) {
         mainLogger.error("[角色提取] 创建条目失败", error.message);
+        toastr.error(`创建角色条目失败: ${error.message}`, "角色提取");
         return false;
-    }
-}
-
-/**
- * 保存世界书数据
- */
-async function saveWorldInfo() {
-    try {
-        const context = window.SillyTavern.getContext();
-        
-        // 调用SillyTavern的世界书保存函数
-        if (typeof window.saveWorldInfo === 'function') {
-            await window.saveWorldInfo(context.characterId, true);
-            mainLogger.success("[角色提取] 世界书已保存");
-        } else if (typeof window.setWorldInfoButtonClass === 'function') {
-            // 如果没有直接保存函数，至少刷新UI
-            window.setWorldInfoButtonClass(context.characterId, true);
-            mainLogger.success("[角色提取] 世界书UI已更新");
-        } else {
-            mainLogger.warn("[角色提取] 无法找到保存函数，但条目已创建");
-        }
-    } catch (error) {
-        mainLogger.error("[角色提取] 保存世界书时出错", error.message);
     }
 }
 
