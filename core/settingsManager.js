@@ -7,6 +7,7 @@ import { extension_settings, getContext } from '/scripts/extensions.js';
 import { saveSettingsDebounced } from '/script.js';
 import { fetchModels, runPlotGenerationCycle } from './plot_engine.js';
 import { clearAllLogs, mainLogger } from './logger.js';
+import { extractCharacterInfo } from './character_extractor.js';
 
 const extensionName = "SillyTavern-AutoPlotEngine";
 
@@ -200,6 +201,52 @@ export function initializeSettings() {
                 await runPlotGenerationCycle();
             } finally {
                 testButton.disabled = false;
+            }
+        });
+    }
+
+    // Bind character extractor button
+    const characterNameInput = document.getElementById('ape_character_name');
+    const extractCharacterButton = document.getElementById('ape_extract_character_button');
+
+    if (extractCharacterButton && characterNameInput) {
+        extractCharacterButton.addEventListener('click', async () => {
+            const characterName = characterNameInput.value.trim();
+            
+            if (!characterName) {
+                toastr.error("请输入角色名称", "角色提取器");
+                return;
+            }
+            
+            mainLogger.info(`开始提取角色信息: ${characterName}`);
+            toastr.info(`正在提取 "${characterName}" 的信息...`, "角色提取器");
+            
+            extractCharacterButton.disabled = true;
+            const originalHTML = extractCharacterButton.innerHTML;
+            extractCharacterButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 提取中...';
+            
+            try {
+                const success = await extractCharacterInfo(characterName);
+                
+                if (success) {
+                    toastr.success(`角色 "${characterName}" 的信息已成功提取并保存到世界书`, "角色提取器");
+                    characterNameInput.value = ''; // 清空输入框
+                } else {
+                    toastr.error(`提取角色 "${characterName}" 的信息失败，请查看日志`, "角色提取器");
+                }
+            } catch (error) {
+                toastr.error(`提取失败: ${error.message}`, "角色提取器");
+                mainLogger.error(`[角色提取] 错误: ${error.message}`);
+            } finally {
+                extractCharacterButton.disabled = false;
+                extractCharacterButton.innerHTML = originalHTML;
+            }
+        });
+
+        // 支持按回车键提取
+        characterNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                extractCharacterButton.click();
             }
         });
     }

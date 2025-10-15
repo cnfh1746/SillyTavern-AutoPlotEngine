@@ -99,16 +99,21 @@
         <div class="ape_settings_block">
             <label for="ape_entry_depth">插入深度</label>
             <input id="ape_entry_depth" type="number" class="text_pole" min="0" max="999" step="1" value="1" />
-            <small class="notes">当位置设置为 "⚙️ 在指定深度" 时生效。深度1表示在最靠近对话的位置，数字越大越远离对话。</small>
         </div>
-        <div class="ape_settings_block" style="background: #2a2a2a; padding: 10px; border-radius: 4px; margin-top: 10px;">
-            <strong>💡 配置说明</strong>
-            <ul style="margin: 5px 0; padding-left: 20px; font-size: 12px;">
-                <li><strong>蓝灯 @齿轮 D1</strong>：位置=⚙️在指定深度, 深度=1 (推荐配置)</li>
-                <li><strong>蓝灯 📌角色后</strong>：位置=📌角色定义之后, 深度=任意</li>
-                <li><strong>蓝灯 ⬆️顶部</strong>：位置=⬆️顶部, 深度=任意</li>
-            </ul>
-            <small class="notes">提示：蓝灯表示条目始终激活（constant=true），不受关键词限制。</small>
+    </fieldset>
+
+    <fieldset class="settings-group">
+        <legend><i class="fas fa-user-plus"></i> 角色信息提取器</legend>
+        <div class="ape_settings_block">
+            <label for="ape_character_name">角色名称</label>
+            <input id="ape_character_name" type="text" class="text_pole" placeholder="输入要提取信息的角色名称" />
+            <small class="notes">输入对话中出现的角色名称，AI将分析上下文并生成该角色的详细信息条目。</small>
+        </div>
+        <div class="ape_settings_block">
+            <button id="ape_extract_character_button" class="menu_button">
+                <i class="fas fa-magic"></i> 提取角色信息
+            </button>
+            <small class="notes">点击后，AI将读取当前上下文，生成角色的详细信息并保存为世界书条目（蓝灯，位置：角色定义之前）。</small>
         </div>
     </fieldset>
 
