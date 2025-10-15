@@ -207,33 +207,17 @@ async function createCharacterEntry(characterName, content, keywords) {
 async function saveWorldInfo() {
     try {
         const context = window.SillyTavern.getContext();
-        const charId = context.characterId;
         
-        if (context.characters && context.characters[charId]) {
-            const char = context.characters[charId];
-            
-            // 调用SillyTavern的保存函数
-            if (window.saveCharacterBook) {
-                await window.saveCharacterBook(charId);
-                mainLogger.success("[角色提取] 世界书已保存");
-            } else {
-                mainLogger.warn("[角色提取] 找不到保存函数，尝试手动保存");
-                // 尝试直接保存
-                const response = await fetch('/api/characters/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        avatar: char.avatar,
-                        data: char.data
-                    })
-                });
-                
-                if (response.ok) {
-                    mainLogger.success("[角色提取] 世界书保存成功");
-                } else {
-                    mainLogger.error("[角色提取] 保存失败");
-                }
-            }
+        // 调用SillyTavern的世界书保存函数
+        if (typeof window.saveWorldInfo === 'function') {
+            await window.saveWorldInfo(context.characterId, true);
+            mainLogger.success("[角色提取] 世界书已保存");
+        } else if (typeof window.setWorldInfoButtonClass === 'function') {
+            // 如果没有直接保存函数，至少刷新UI
+            window.setWorldInfoButtonClass(context.characterId, true);
+            mainLogger.success("[角色提取] 世界书UI已更新");
+        } else {
+            mainLogger.warn("[角色提取] 无法找到保存函数，但条目已创建");
         }
     } catch (error) {
         mainLogger.error("[角色提取] 保存世界书时出错", error.message);
