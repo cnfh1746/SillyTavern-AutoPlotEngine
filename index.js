@@ -5,41 +5,11 @@
 
 import { eventSource, event_types } from '/script.js';
 import { createDrawer } from './core/drawer.js';
-import { initializeSettings, getSettings } from './core/settingsManager.js';
-import { runPlotGenerationCycle } from './core/plot_engine.js';
+import { initializeSettings } from './core/settingsManager.js';
 import { initLoggers, mainLogger } from './core/logger.js';
+import { onMessageReceived, onChatChanged } from './core/events.js';
 
 const extensionName = "SillyTavern-AutoPlotEngine";
-let messageCounter = 0;
-let isProcessing = false;
-
-/**
- * Handles the MESSAGE_RECEIVED event to trigger the plot generation cycle.
- */
-async function onMessageReceived() {
-    const settings = getSettings();
-    if (!settings.enabled || isProcessing || settings.runMode !== 'auto') {
-        return;
-    }
-
-    messageCounter++;
-    mainLogger.debug(`消息计数: ${messageCounter}/${settings.triggerThreshold}`);
-
-    if (messageCounter >= settings.triggerThreshold) {
-        isProcessing = true;
-        mainLogger.info(`已达到触发阈值 (${settings.triggerThreshold})，开始生成剧情`);
-        
-        try {
-            await runPlotGenerationCycle();
-        } catch (error) {
-            mainLogger.error("剧情生成周期出错", error.message);
-        } finally {
-            messageCounter = 0;
-            isProcessing = false;
-            mainLogger.info("计数器已重置，等待下一次触发");
-        }
-    }
-}
 
 /**
  * Initializes the extension.
@@ -66,8 +36,9 @@ jQuery(async () => {
                 // 3. Initialize the settings UI
                 setTimeout(initializeSettings, 500);
 
-                // 4. Register the main event listener
+                // 4. Register event listeners
                 eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+                eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
 
                 console.log(`[${extensionName}] Initialization complete. Waiting for messages...`);
 
