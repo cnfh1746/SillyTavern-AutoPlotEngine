@@ -1,37 +1,57 @@
 /**
  * @file drawer.js
- * @description Manages the creation of the settings panel drawer for the extension.
- * This is adapted from a known working example to ensure compatibility.
+ * @description 创建扩展面板按钮并管理弹出式设置对话框
  */
-
-import { getContext } from '/scripts/extensions.js';
-import { slideToggle } from '/lib.js';
 
 const extensionName = "SillyTavern-AutoPlotEngine";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 /**
- * Creates the drawer in the extensions panel and handles its toggle logic.
+ * 显示弹出式设置对话框
+ */
+export function showModal() {
+    const $overlay = $('#ape_modal_overlay');
+    if ($overlay.length > 0) {
+        $overlay.fadeIn(200);
+    }
+}
+
+/**
+ * 隐藏弹出式设置对话框
+ */
+export function hideModal() {
+    const $overlay = $('#ape_modal_overlay');
+    if ($overlay.length > 0) {
+        $overlay.fadeOut(200);
+    }
+}
+
+/**
+ * 创建扩展面板中的简洁按钮
  */
 export async function createDrawer() {
-    // Prevent duplicate creation
+    // 防止重复创建
     if ($("#ape_extension_frame").length > 0) return;
 
+    // 创建简洁的按钮框架
     const frameHtml = `
-      <div id="ape_extension_frame">
-          <div class="inline-drawer">
-              <div class="inline-drawer-toggle inline-drawer-header">
-                  <b><i class="fas fa-brain"></i> 自动剧情引擎</b>
-                  <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+      <div id="ape_extension_frame" style="padding: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333);">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                  <i class="fas fa-brain" style="font-size: 1.5em; color: #8b7fc6;"></i>
+                  <div>
+                      <h4 style="margin: 0; color: var(--SmartThemeBodyColor, #e0e0e0);">自动剧情引擎</h4>
+                      <small style="color: var(--grey70, #999);">智能剧情生成与角色日志系统</small>
+                  </div>
               </div>
-              <div class="inline-drawer-content" style="display: none;">
-                  <!-- Content will be loaded here -->
-              </div>
+              <button id="ape_open_settings_button" class="menu_button" style="padding: 10px 20px;">
+                  <i class="fas fa-cog"></i> 打开设置
+              </button>
           </div>
       </div>
     `;
 
-    // Append the frame to the correct container in the extensions tab
+    // 添加到扩展设置容器
     const $extensionsContainer = $('#extensions_settings2');
     if ($extensionsContainer.length === 0) {
         console.error(`[${extensionName}] Could not find the extensions container #extensions_settings2.`);
@@ -39,24 +59,45 @@ export async function createDrawer() {
     }
     $extensionsContainer.append(frameHtml);
 
-    const $frame = $("#ape_extension_frame");
-    const $contentPanel = $frame.find('.inline-drawer-content');
-    const $toggle = $frame.find('.inline-drawer-toggle');
-    const $icon = $frame.find('.inline-drawer-icon');
-
-    // Load the actual settings HTML into the content panel
+    // 加载模态对话框HTML
     try {
-        const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
-        $contentPanel.html(settingsHtml);
+        const modalHtml = await $.get(`${extensionFolderPath}/modal_settings.html`);
+        $('body').append(modalHtml);
+        
+        // 加载模态对话框CSS
+        const modalCssLink = document.createElement('link');
+        modalCssLink.rel = 'stylesheet';
+        modalCssLink.href = `${extensionFolderPath}/modal_style.css`;
+        document.head.appendChild(modalCssLink);
+        
     } catch (error) {
-        console.error(`[${extensionName}] Failed to load settings.html:`, error);
-        $contentPanel.html('<p style="color:red;">错误：无法加载设置面板内容。</p>');
+        console.error(`[${extensionName}] Failed to load modal:`, error);
+        return;
     }
 
-    // We do NOT bind a click event here.
-    // SillyTavern's global script will automatically handle the toggling
-    // for any element with the class 'inline-drawer-toggle'.
-    // Manually adding a handler would cause a conflict.
+    // 绑定按钮点击事件
+    $('#ape_open_settings_button').on('click', () => {
+        showModal();
+    });
 
-    console.log(`[${extensionName}] Drawer created successfully in extensions panel.`);
+    // 绑定模态对话框关闭事件
+    $('#ape_modal_close, #ape_modal_cancel').on('click', () => {
+        hideModal();
+    });
+
+    // 点击遮罩层关闭
+    $('#ape_modal_overlay').on('click', function(e) {
+        if (e.target === this) {
+            hideModal();
+        }
+    });
+
+    // ESC键关闭
+    $(document).on('keydown', function(e) {
+        if (e.key === 'Escape' && $('#ape_modal_overlay').is(':visible')) {
+            hideModal();
+        }
+    });
+
+    console.log(`[${extensionName}] Extension panel button created successfully.`);
 }

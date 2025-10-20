@@ -8,6 +8,8 @@ import { saveSettingsDebounced } from '/script.js';
 import { fetchModels, runPlotGenerationCycle } from './plot_engine.js';
 import { clearAllLogs, mainLogger } from './logger.js';
 import { extractCharacterInfo } from './character_extractor.js';
+import { addCharacterDiary } from './character_diary.js';
+import { hideModal } from './drawer.js';
 
 const extensionName = "SillyTavern-AutoPlotEngine";
 
@@ -35,6 +37,24 @@ const defaultSettings = {
     entryKeywords: ["剧情", "plot", "大纲", "故事", "情节"],
     entryPosition: 4,  // 0=before_char, 1=after_char, 2=top, 3=bottom, 4=@depth
     entryDepth: 1,     // 1-999
+    // 角色日志提示词
+    diaryPrompt: `你是一个专业的事件记录员。请分析下面的对话内容，为角色"\${characterName}"生成一条非常精炼的历史事件记录。
+
+要求：
+1. 只记录对该角色有重要意义的事件
+2. 使用第一人称（"我"）的视角
+3. 格式严格遵循：YYYYMMDD 简短的事件描述（10-20字以内）
+4. 只输出一条最重要的事件，不要输出多条
+5. 如果对话中没有重要事件发生，请输出"无"
+
+示例格式：
+20250607 {{user}}送了我一个项链，我很喜欢
+20250608 在咖啡厅遇到了老朋友
+
+对话内容：
+\${recentMessages}
+
+请生成一条事件记录：`,
 };
 
 /**
@@ -248,6 +268,105 @@ export function initializeSettings() {
             if (e.key === 'Enter') {
                 extractCharacterButton.click();
             }
+        });
+    }
+    
+    // Bind character diary button
+    const diaryCharacterNameInput = document.getElementById('ape_diary_character_name');
+    const addDiaryButton = document.getElementById('ape_add_diary_button');
+    const diaryPromptTextarea = document.getElementById('ape_diary_prompt');
+
+    if (addDiaryButton && diaryCharacterNameInput) {
+        // Load diary prompt from settings
+        if (diaryPromptTextarea && settings.diaryPrompt) {
+            diaryPromptTextarea.value = settings.diaryPrompt;
+        }
+
+        // Save diary prompt when changed
+        if (diaryPromptTextarea) {
+            diaryPromptTextarea.addEventListener('change', () => {
+                const currentSettings = getSettings();
+                currentSettings.diaryPrompt = diaryPromptTextarea.value;
+                saveSettings(currentSettings);
+            });
+        }
+
+        addDiaryButton.addEventListener('click', async () => {
+            const characterName = diaryCharacterNameInput.value.trim();
+            
+            if (!characterName) {
+                toastr.error("请输入角色名称", "角色日志");
+                return;
+            }
+            
+            mainLogger.info(`开始生成角色日志: ${characterName}`);
+            toastr.info(`正在为 "${characterName}" 生成日志...`, "角色日志");
+            
+            addDiaryButton.disabled = true;
+            const originalHTML = addDiaryButton.innerHTML;
+            addDiaryButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...';
+            
+            try {
+                // Save current diary prompt before generating
+                if (diaryPromptTextarea) {
+                    const currentSettings = getSettings();
+                    currentSettings.diaryPrompt = diaryPromptTextarea.value;
+                    saveSettings(currentSettings);
+                }
+
+                const success = await addCharacterDiary(characterName);
+                
+                if (success) {
+                    toastr.success(`角色 "${characterName}" 的日志已成功生成并追加`, "角色日志");
+                    diaryCharacterNameInput.value = ''; // 清空输入框
+                } else {
+                    toastr.warning(`未能为 "${characterName}" 生成日志，可能没有重要事件`, "角色日志");
+                }
+            } catch (error) {
+                toastr.error(`生成日志失败: ${error.message}`, "角色日志");
+                mainLogger.error(`[角色日志] 错误: ${error.message}`);
+            } finally {
+                addDiaryButton.disabled = false;
+                addDiaryButton.innerHTML = originalHTML;
+            }
+        });
+
+        // 支持按回车键生成
+        diaryCharacterNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addDiaryButton.click();
+            }
+        });
+    }
+
+    // Tab switching logic
+    const tabButtons = document.querySelectorAll('.ape_tab_button');
+    const tabContents = document.querySelectorAll('.ape_tab_content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.getAttribute('data-tab');
+            
+            // Remove active class from all tabs and contents
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding content
+            button.classList.add('active');
+            const targetContent = document.querySelector(`.ape_tab_content[data-tab="${targetTab}"]`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+        });
+    });
+
+    // Modal save button
+    const modalSaveButton = document.getElementById('ape_modal_save');
+    if (modalSaveButton) {
+        modalSaveButton.addEventListener('click', () => {
+            saveAllFromUI();
+            toastr.success("设置已保存", "自动剧情引擎");
+            hideModal();
         });
     }
     

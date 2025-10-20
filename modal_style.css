@@ -1,0 +1,394 @@
+/* 弹出式设置对话框样式 */
+
+/* 遮罩层 */
+#ape_modal_overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 模态容器 */
+#ape_modal_container {
+    background: var(--SmartThemeBlurTintColor, #1a1a1a);
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 900px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* 模态头部 */
+.ape_modal_header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #333);
+    background: linear-gradient(135deg, rgba(100, 50, 150, 0.1), rgba(50, 100, 200, 0.1));
+}
+
+.ape_modal_header h3 {
+    margin: 0;
+    font-size: 1.4em;
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ape_modal_header h3 i {
+    color: #8b7fc6;
+}
+
+.ape_modal_close_btn {
+    background: transparent;
+    border: none;
+    color: var(--SmartThemeBodyColor, #aaa);
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.ape_modal_close_btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+/* 模态主体 */
+.ape_modal_body {
+    padding: 20px 25px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* 标签页导航 */
+.ape_tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--SmartThemeBorderColor, #333);
+    flex-wrap: wrap;
+}
+
+.ape_tab_button {
+    background: transparent;
+    border: none;
+    padding: 12px 20px;
+    color: var(--SmartThemeBodyColor, #aaa);
+    cursor: pointer;
+    font-size: 0.95em;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+}
+
+.ape_tab_button:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+}
+
+.ape_tab_button.active {
+    background: linear-gradient(135deg, rgba(100, 50, 150, 0.2), rgba(50, 100, 200, 0.2));
+    color: #fff;
+    font-weight: bold;
+}
+
+.ape_tab_button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #8b7fc6, #5b9bd5);
+}
+
+/* 标签页内容 */
+.ape_tab_content {
+    display: none;
+    animation: fadeInContent 0.3s ease;
+}
+
+.ape_tab_content.active {
+    display: block;
+}
+
+@keyframes fadeInContent {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 设置块 */
+.ape_settings_block {
+    margin-bottom: 20px;
+}
+
+.ape_settings_block label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    font-weight: 500;
+}
+
+.ape_settings_block input[type="text"],
+.ape_settings_block input[type="password"],
+.ape_settings_block input[type="number"],
+.ape_settings_block select,
+.ape_settings_block textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 6px;
+    background: var(--black30a, rgba(0, 0, 0, 0.3));
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    font-size: 0.95em;
+    transition: all 0.2s ease;
+}
+
+.ape_settings_block input:focus,
+.ape_settings_block select:focus,
+.ape_settings_block textarea:focus {
+    outline: none;
+    border-color: #8b7fc6;
+    box-shadow: 0 0 0 2px rgba(139, 127, 198, 0.2);
+}
+
+.ape_settings_block textarea {
+    resize: vertical;
+    font-family: 'Courier New', monospace;
+    line-height: 1.5;
+}
+
+.ape_settings_block small.notes {
+    display: block;
+    margin-top: 6px;
+    color: var(--grey70, #999);
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+
+/* 日志面板 */
+.ape_log_panel {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #0f0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.6;
+}
+
+/* 模型选择器 */
+.model-selector-wrapper {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 8px;
+}
+
+/* 模态底部 */
+.ape_modal_footer {
+    padding: 15px 25px;
+    border-top: 1px solid var(--SmartThemeBorderColor, #333);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.menu_button_primary {
+    background: linear-gradient(135deg, #8b7fc6, #5b9bd5);
+    color: #fff !important;
+    font-weight: bold;
+}
+
+.menu_button_primary:hover {
+    background: linear-gradient(135deg, #9d8fd8, #6daee6);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 127, 198, 0.3);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    margin-left: 10px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-switch .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #444;
+    transition: 0.3s;
+    border-radius: 24px;
+}
+
+.toggle-switch .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .slider {
+    background: linear-gradient(135deg, #8b7fc6, #5b9bd5);
+}
+
+.toggle-switch input:checked + .slider:before {
+    transform: translateX(26px);
+}
+
+/* Fieldset 样式 */
+fieldset.settings-group {
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 15px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+fieldset.settings-group legend {
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    font-weight: bold;
+    padding: 0 10px;
+}
+
+/* 按钮样式增强 */
+.menu_button {
+    padding: 10px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeBorderColor, #444);
+    background: var(--black30a, rgba(0, 0, 0, 0.3));
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95em;
+}
+
+.menu_button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #666;
+    transform: translateY(-1px);
+}
+
+.menu_button:active {
+    transform: translateY(0);
+}
+
+.menu_button i {
+    font-size: 1.1em;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    #ape_modal_container {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .ape_modal_header,
+    .ape_modal_body,
+    .ape_modal_footer {
+        padding: 15px;
+    }
+
+    .ape_tabs {
+        gap: 3px;
+    }
+
+    .ape_tab_button {
+        padding: 10px 12px;
+        font-size: 0.85em;
+    }
+
+    .model-selector-wrapper {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 滚动条样式 */
+.ape_modal_body::-webkit-scrollbar,
+.ape_log_panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ape_modal_body::-webkit-scrollbar-track,
+.ape_log_panel::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.ape_modal_body::-webkit-scrollbar-thumb,
+.ape_log_panel::-webkit-scrollbar-thumb {
+    background: rgba(139, 127, 198, 0.5);
+    border-radius: 4px;
+}
+
+.ape_modal_body::-webkit-scrollbar-thumb:hover,
+.ape_log_panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 127, 198, 0.7);
+}
