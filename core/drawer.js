@@ -1,6 +1,6 @@
 /**
  * @file drawer.js
- * @description 创建扩展面板按钮并管理弹出式设置对话框
+ * @description 创建扩展面板可折叠抽屉并管理弹出式设置对话框
  */
 
 const extensionName = "SillyTavern-AutoPlotEngine";
@@ -27,26 +27,32 @@ export function hideModal() {
 }
 
 /**
- * 创建扩展面板中的简洁按钮
+ * 创建扩展面板中的可折叠抽屉
  */
 export async function createDrawer() {
     // 防止重复创建
     if ($("#ape_extension_frame").length > 0) return;
 
-    // 创建简洁的按钮框架
+    // 创建可折叠的抽屉框架
     const frameHtml = `
-      <div id="ape_extension_frame" style="padding: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor, #333);">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 12px;">
-                  <i class="fas fa-brain" style="font-size: 1.5em; color: #8b7fc6;"></i>
-                  <div>
-                      <h4 style="margin: 0; color: var(--SmartThemeBodyColor, #e0e0e0);">自动剧情引擎</h4>
-                      <small style="color: var(--grey70, #999);">智能剧情生成与角色日志系统</small>
+      <div id="ape_extension_frame">
+          <div class="inline-drawer">
+              <div class="inline-drawer-toggle inline-drawer-header">
+                  <b><i class="fas fa-brain"></i> 自动剧情引擎</b>
+                  <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+              </div>
+              <div class="inline-drawer-content" style="display: none;">
+                  <div style="padding: 15px;">
+                      <div style="display: flex; flex-direction: column; gap: 10px;">
+                          <p style="margin: 0; color: var(--grey70, #999); font-size: 0.9em;">
+                              智能剧情生成与角色日志系统
+                          </p>
+                          <button id="ape_open_settings_button" class="menu_button" style="width: 100%;">
+                              <i class="fas fa-cog"></i> 打开设置
+                          </button>
+                      </div>
                   </div>
               </div>
-              <button id="ape_open_settings_button" class="menu_button" style="padding: 10px 20px;">
-                  <i class="fas fa-cog"></i> 打开设置
-              </button>
           </div>
       </div>
     `;
@@ -99,5 +105,5 @@ export async function createDrawer() {
         }
     });
 
-    console.log(`[${extensionName}] Extension panel button created successfully.`);
+    console.log(`[${extensionName}] Collapsible drawer with modal created successfully.`);
 }
