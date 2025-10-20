@@ -1,11 +1,11 @@
 /**
  * @file character_diary.js
- * @description 角色日志功能 - 自动记录角色经历并追加到现有世界书条目
+ * @description 角色日志功能 - 自动记录角色经历并保存到世界书
  */
 
 import { mainLogger } from './logger.js';
 import { getSettings } from './settingsManager.js';
-import { loadWorldInfo, saveWorldInfo } from "/scripts/world-info.js";
+import { loadWorldInfo, saveWorldInfo, createWorldInfoEntry } from "/scripts/world-info.js";
 
 const { toastr, TavernHelper } = window;
 
@@ -35,7 +35,7 @@ ${recentMessages}
 
 请生成一条事件记录：`;
 
-    return customPrompt.replace(/\${characterName}/g, characterName).replace(/\${recentMessages}/g, recentMessages);
+    return customPrompt.replace(/\$\{characterName\}/g, characterName).replace(/\$\{recentMessages\}/g, recentMessages);
 }
 
 /**
@@ -126,14 +126,11 @@ function getRecentMessages(messageCount = 10) {
 }
 
 /**
- * 查找并更新角色的世界书条目
- * @param {string} characterName - 角色名称
- * @param {string} diaryEntry - 要追加的日志条目
- * @returns {Promise<boolean>} 是否成功
+ * 追加模式：追加到原角色条目
  */
-async function appendToDiaryEntry(characterName, diaryEntry) {
+async function appendToOriginalEntry(characterName, diaryEntry) {
     try {
-        mainLogger.info(`[角色日志] 正在查找角色"${characterName}"的世界书条目...`);
+        mainLogger.info(`[角色日志] [追加模式] 查找角色"${characterName}"的世界书条目...`);
         
         if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
             throw new Error("TavernHelper API 不可用");
@@ -194,19 +191,114 @@ async function appendToDiaryEntry(characterName, diaryEntry) {
         await saveWorldInfo(lorebookName, bookData, true);
         
         mainLogger.success(`[角色日志] 日志已成功追加到角色"${characterName}"的条目！`);
-        toastr.success(`日志已追加到"${characterName}"的条目`, "角色日志");
-        
         return true;
         
     } catch (error) {
-        mainLogger.error("[角色日志] 追加日志失败", error.message);
-        toastr.error(`追加日志失败: ${error.message}`, "角色日志");
-        return false;
+        mainLogger.error("[角色日志] [追加模式] 失败", error.message);
+        throw error;
     }
 }
 
 /**
- * 主函数：为指定角色生成并追加日志
+ * 独立模式：创建独立的"角色名日志"条目
+ */
+async function createSeparateEntry(characterName, diaryEntry) {
+    try {
+        mainLogger.info(`[角色日志] [独立模式] 为角色"${characterName}"创建/更新日志条目...`);
+        
+        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
+            throw new Error("TavernHelper API 不可用");
+        }
+        
+        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
+        
+        if (!lorebookName) {
+            throw new Error("当前角色没有绑定世界书");
+        }
+        
+        mainLogger.info(`[角色日志] 加载世界书: ${lorebookName}`);
+        const bookData = await loadWorldInfo(lorebookName);
+        
+        if (!bookData || !bookData.entries) {
+            throw new Error(`无法加载世界书"${lorebookName}"`);
+        }
+        
+        const entryTitle = `${characterName}日志`;
+        
+        // 查找是否已存在该日志条目
+        let diaryEntryObj = Object.values(bookData.entries).find(
+            entry => entry && entry.comment && entry.comment.includes(`角色日志: ${characterName}`)
+        );
+        
+        if (diaryEntryObj) {
+            // 更新现有条目
+            mainLogger.info(`[角色日志] 找到现有日志条目 (uid: ${diaryEntryObj.uid})，正在追加...`);
+            diaryEntryObj.content += '\n' + diaryEntry;
+            
+        } else {
+            // 创建新条目
+            mainLogger.info(`[角色日志] 未找到现有日志条目，正在创建新条目...`);
+            
+            // 获取最大uid
+            const maxUid = Math.max(0, ...Object.values(bookData.entries).map(e => e.uid || 0));
+            const newUid = maxUid + 1;
+            
+            diaryEntryObj = {
+                uid: newUid,
+                key: [characterName, characterName.substring(0, 2)], // 触发词：角色全名 + 简称
+                keysecondary: [],
+                comment: `角色日志: ${characterName}`,
+                content: `# ${entryTitle}\n\n${diaryEntry}`,
+                constant: false,
+                selective: true,
+                insertion_order: 100,
+                enabled: true,
+                position: 0, // before_char
+                extensions: {
+                    position: 0,
+                    exclude_recursion: false,
+                    display_index: newUid,
+                    probability: 100,
+                    useProbability: true,
+                    depth: 4,
+                    selectiveLogic: 0,
+                    group: "",
+                    group_override: false,
+                    group_weight: 100,
+                    prevent_recursion: false,
+                    delay_until_recursion: false,
+                    scan_depth: null,
+                    match_whole_words: null,
+                    use_group_scoring: false,
+                    case_sensitive: null,
+                    automation_id: "",
+                    role: 0,
+                    vectorized: false,
+                    sticky: 0,
+                    cooldown: 0,
+                    delay: 0
+                }
+            };
+            
+            bookData.entries[newUid] = diaryEntryObj;
+            mainLogger.info(`[角色日志] 新条目已创建 (uid: ${newUid})`);
+        }
+        
+        // 保存世界书
+        mainLogger.info(`[角色日志] 正在保存世界书...`);
+        await saveWorldInfo(lorebookName, bookData, true);
+        
+        mainLogger.success(`[角色日志] 日志已成功保存到独立条目"${entryTitle}"！`);
+        return true;
+        
+    } catch (error) {
+        mainLogger.error("[角色日志] [独立模式] 失败", error.message);
+        throw error;
+    }
+}
+
+/**
+ * 主函数：为指定角色生成并保存日志
  * @param {string} characterName - 角色名称
  * @returns {Promise<boolean>} 是否成功
  */
@@ -222,6 +314,14 @@ export async function addCharacterDiary(characterName) {
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
     
     try {
+        const settings = getSettings();
+        
+        // 检查日志功能是否启用
+        if (!settings.diaryEnabled) {
+            mainLogger.info("[角色日志] 日志功能已禁用");
+            return false;
+        }
+        
         // 1. 获取最近的聊天记录
         mainLogger.info("[角色日志] 步骤 1/3: 正在收集最近的对话...");
         const recentMessages = getRecentMessages(10);
@@ -236,7 +336,6 @@ export async function addCharacterDiary(characterName) {
         
         // 2. 调用AI生成日志条目
         mainLogger.info("[角色日志] 步骤 2/3: 正在调用AI生成日志...");
-        const settings = getSettings();
         const prompt = buildDiaryPrompt(characterName, recentMessages);
         const diaryEntry = await callDiaryAPI(settings, prompt);
         
@@ -245,13 +344,22 @@ export async function addCharacterDiary(characterName) {
             return false;
         }
         
-        // 3. 追加到世界书条目
-        mainLogger.info("[角色日志] 步骤 3/3: 正在追加到世界书条目...");
-        const success = await appendToDiaryEntry(characterName, diaryEntry);
+        // 3. 根据存储模式保存日志
+        mainLogger.info("[角色日志] 步骤 3/3: 正在保存日志...");
+        const storageMode = settings.diaryStorageMode || 'append';
+        mainLogger.info(`[角色日志] 存储模式: ${storageMode === 'append' ? '追加到原条目' : '创建独立条目'}`);
+        
+        let success = false;
+        if (storageMode === 'separate') {
+            success = await createSeparateEntry(characterName, diaryEntry);
+        } else {
+            success = await appendToOriginalEntry(characterName, diaryEntry);
+        }
         
         if (success) {
             mainLogger.success(`[角色日志] ========== 日志生成完成 ==========`);
             mainLogger.info(`[角色日志] 新增内容: ${diaryEntry}`);
+            toastr.success(`日志已成功保存`, "角色日志");
         }
         
         return success;

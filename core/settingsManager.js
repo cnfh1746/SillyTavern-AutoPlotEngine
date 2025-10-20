@@ -55,6 +55,12 @@ const defaultSettings = {
 \${recentMessages}
 
 请生成一条事件记录：`,
+    // 角色日志配置
+    diaryEnabled: false,                    // 是否启用角色日志功能
+    diaryRunMode: 'manual',                 // 'auto' or 'manual'
+    diaryTriggerThreshold: 15,              // 自动触发阈值（消息数）
+    diaryStorageMode: 'append',             // 'append'（追加到原条目）or 'separate'（创建新条目）
+    diaryTargetCharacter: '',               // 要记录日志的角色名称（自动模式用）
 };
 
 /**
@@ -102,6 +108,12 @@ export function initializeSettings() {
         'ape_entry_keywords': 'entryKeywords',
         'ape_entry_position': 'entryPosition',
         'ape_entry_depth': 'entryDepth',
+        // 角色日志相关
+        'ape_diary_enabled': 'diaryEnabled',
+        'ape_diary_run_mode': 'diaryRunMode',
+        'ape_diary_trigger_threshold': 'diaryTriggerThreshold',
+        'ape_diary_storage_mode': 'diaryStorageMode',
+        'ape_diary_target_character': 'diaryTargetCharacter',
     };
 
     // Function to save all settings from UI
@@ -271,6 +283,31 @@ export function initializeSettings() {
         });
     }
     
+    // Bind character diary settings
+    const diaryRunModeSelect = document.getElementById('ape_diary_run_mode');
+    const diaryAutoSettings = document.getElementById('ape_diary_auto_settings');
+    const diaryTargetChar = document.getElementById('ape_diary_target_char');
+    const diaryManualBlock = document.getElementById('ape_diary_manual_block');
+    
+    const updateDiaryUIVisibility = () => {
+        if (diaryRunModeSelect && diaryAutoSettings && diaryTargetChar && diaryManualBlock) {
+            if (diaryRunModeSelect.value === 'manual') {
+                diaryAutoSettings.style.display = 'none';
+                diaryTargetChar.style.display = 'none';
+                diaryManualBlock.style.display = 'block';
+            } else {
+                diaryAutoSettings.style.display = 'block';
+                diaryTargetChar.style.display = 'block';
+                diaryManualBlock.style.display = 'none';
+            }
+        }
+    };
+    
+    if (diaryRunModeSelect) {
+        diaryRunModeSelect.addEventListener('change', updateDiaryUIVisibility);
+        updateDiaryUIVisibility();
+    }
+
     // Bind character diary button
     const diaryCharacterNameInput = document.getElementById('ape_diary_character_name');
     const addDiaryButton = document.getElementById('ape_add_diary_button');

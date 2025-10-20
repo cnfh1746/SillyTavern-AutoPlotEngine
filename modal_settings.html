@@ -157,18 +157,64 @@
             <div class="ape_tab_content" data-tab="diary">
                 <div class="ape_settings_block">
                     <h4><i class="fas fa-book-open"></i> 角色日志生成器</h4>
-                    <p class="notes">自动记录角色经历的重要事件，追加到现有角色条目末尾。</p>
+                    <p class="notes">自动记录角色经历的重要事件。</p>
                 </div>
-                <div class="ape_settings_block">
+                
+                <fieldset class="settings-group">
+                    <legend>基本设置</legend>
+                    <div class="ape_settings_block">
+                        <label for="ape_diary_enabled"><strong>启用角色日志</strong></label>
+                        <label class="toggle-switch">
+                            <input id="ape_diary_enabled" type="checkbox" />
+                            <span class="slider"></span>
+                        </label>
+                        <small class="notes">总开关，关闭后所有日志功能不运行。</small>
+                    </div>
+                    
+                    <div class="ape_settings_block">
+                        <label for="ape_diary_run_mode">运行模式</label>
+                        <select id="ape_diary_run_mode" class="text_pole">
+                            <option value="auto">自动 (每N条消息)</option>
+                            <option value="manual">手动</option>
+                        </select>
+                    </div>
+                    
+                    <div class="ape_settings_block" id="ape_diary_auto_settings">
+                        <label for="ape_diary_trigger_threshold">自动触发阈值</label>
+                        <input id="ape_diary_trigger_threshold" type="number" class="text_pole" min="5" max="50" step="1" value="15" />
+                        <small class="notes">每当有 N 条新消息后，自动为指定角色生成日志。</small>
+                    </div>
+                    
+                    <div class="ape_settings_block" id="ape_diary_target_char">
+                        <label for="ape_diary_target_character">目标角色</label>
+                        <input id="ape_diary_target_character" type="text" class="text_pole" placeholder="输入角色名称（自动模式用）" />
+                        <small class="notes">自动模式下，为该角色记录日志。留空则使用当前对话角色。</small>
+                    </div>
+                </fieldset>
+                
+                <fieldset class="settings-group">
+                    <legend>存储设置</legend>
+                    <div class="ape_settings_block">
+                        <label for="ape_diary_storage_mode">存储位置</label>
+                        <select id="ape_diary_storage_mode" class="text_pole">
+                            <option value="append">📝 追加到原角色条目</option>
+                            <option value="separate">📖 创建独立"角色名日志"条目</option>
+                        </select>
+                        <small class="notes">
+                            <strong>追加模式</strong>：在原条目末尾追加"历史事件"部分<br>
+                            <strong>独立模式</strong>：创建新条目"角色名日志"，触发词为角色名
+                        </small>
+                    </div>
+                </fieldset>
+                
+                <div class="ape_settings_block" id="ape_diary_manual_block">
+                    <h4>手动生成</h4>
                     <label for="ape_diary_character_name">角色名称</label>
                     <input id="ape_diary_character_name" type="text" class="text_pole" placeholder="输入要记录日志的角色名称" />
-                    <small class="notes">必须是已存在世界书条目的角色。</small>
-                </div>
-                <div class="ape_settings_block">
-                    <button id="ape_add_diary_button" class="menu_button">
-                        <i class="fas fa-pen"></i> 生成并追加日志
+                    <button id="ape_add_diary_button" class="menu_button" style="margin-top: 10px;">
+                        <i class="fas fa-pen"></i> 立即生成日志
                     </button>
-                    <small class="notes">AI会分析最近对话，生成精炼的事件记录。</small>
+                    <small class="notes">手动模式下点击此按钮触发生成。</small>
                 </div>
                 <div class="ape_settings_block">
                     <label for="ape_diary_prompt">日志生成提示词</label>
