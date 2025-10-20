@@ -195,21 +195,26 @@ export function initializeSettings() {
         });
     }
 
-    // Add logic for manual run button and mode switching
+    // Add logic for plot manual run button and mode switching
     const runModeSelect = document.getElementById('ape_run_mode');
+    const plotAutoSettings = document.getElementById('ape_plot_auto_settings');
     const manualRunBlock = document.getElementById('ape_manual_run_block');
     const manualRunButton = document.getElementById('ape_manual_run_button');
 
-    const updateUIVisibility = () => {
-        if (runModeSelect.value === 'manual') {
-            manualRunBlock.style.display = 'block';
-        } else {
-            manualRunBlock.style.display = 'none';
+    const updatePlotUIVisibility = () => {
+        if (runModeSelect && plotAutoSettings && manualRunBlock) {
+            if (runModeSelect.value === 'manual') {
+                plotAutoSettings.style.display = 'none';
+                manualRunBlock.style.display = 'block';
+            } else {
+                plotAutoSettings.style.display = 'block';
+                manualRunBlock.style.display = 'none';
+            }
         }
     };
 
     if (runModeSelect && manualRunBlock && manualRunButton) {
-        runModeSelect.addEventListener('change', updateUIVisibility);
+        runModeSelect.addEventListener('change', updatePlotUIVisibility);
         manualRunButton.addEventListener('click', async () => {
             mainLogger.info("手动触发剧情生成");
             toastr.info("手动触发剧情生成...", "APE");
@@ -222,7 +227,7 @@ export function initializeSettings() {
                 manualRunButton.innerHTML = '<i class="fas fa-play-circle"></i> 立即生成剧情大纲';
             }
         });
-        updateUIVisibility();
+        updatePlotUIVisibility();
     }
 
     // Bind log panel buttons

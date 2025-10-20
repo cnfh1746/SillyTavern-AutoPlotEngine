@@ -34,32 +34,6 @@
             <!-- 核心设置 -->
             <div class="ape_tab_content active" data-tab="core">
                 <div class="ape_settings_block">
-                    <label for="ape_enabled"><strong>引擎总开关</strong></label>
-                    <label class="toggle-switch">
-                        <input id="ape_enabled" type="checkbox" />
-                        <span class="slider"></span>
-                    </label>
-                    <small class="notes">启用或禁用整个自动剧情引擎。</small>
-                </div>
-                <div class="ape_settings_block">
-                    <label for="ape_run_mode">运行模式</label>
-                    <select id="ape_run_mode" class="text_pole">
-                        <option value="auto">自动 (每N条消息)</option>
-                        <option value="manual">手动</option>
-                    </select>
-                </div>
-                <div class="ape_settings_block">
-                    <label for="ape_trigger_threshold">自动触发阈值</label>
-                    <input id="ape_trigger_threshold" type="number" class="text_pole" min="1" max="50" step="1" value="10" />
-                    <small class="notes">每当有 N 条新消息后，自动触发一次剧情分析。</small>
-                </div>
-                <div class="ape_settings_block" id="ape_manual_run_block" style="display: none;">
-                    <button id="ape_manual_run_button" class="menu_button">
-                        <i class="fas fa-play-circle"></i> 立即生成剧情大纲
-                    </button>
-                    <small class="notes">手动模式下点击此按钮触发生成。</small>
-                </div>
-                <div class="ape_settings_block">
                     <label for="ape_silent_mode"><strong>静默模式</strong></label>
                     <label class="toggle-switch">
                         <input id="ape_silent_mode" type="checkbox" />
@@ -114,6 +88,39 @@
 
             <!-- 剧情大纲 -->
             <div class="ape_tab_content" data-tab="plot">
+                <fieldset class="settings-group">
+                    <legend>基本设置</legend>
+                    <div class="ape_settings_block">
+                        <label for="ape_enabled"><strong>启用剧情大纲</strong></label>
+                        <label class="toggle-switch">
+                            <input id="ape_enabled" type="checkbox" />
+                            <span class="slider"></span>
+                        </label>
+                        <small class="notes">启用或禁用剧情大纲自动生成功能。</small>
+                    </div>
+                    
+                    <div class="ape_settings_block">
+                        <label for="ape_run_mode">运行模式</label>
+                        <select id="ape_run_mode" class="text_pole">
+                            <option value="auto">自动 (每N条消息)</option>
+                            <option value="manual">手动</option>
+                        </select>
+                    </div>
+                    
+                    <div class="ape_settings_block" id="ape_plot_auto_settings">
+                        <label for="ape_trigger_threshold">自动触发阈值</label>
+                        <input id="ape_trigger_threshold" type="number" class="text_pole" min="1" max="50" step="1" value="10" />
+                        <small class="notes">每当有 N 条新消息后，自动触发一次剧情分析。</small>
+                    </div>
+                    
+                    <div class="ape_settings_block" id="ape_manual_run_block">
+                        <button id="ape_manual_run_button" class="menu_button">
+                            <i class="fas fa-play-circle"></i> 立即生成剧情大纲
+                        </button>
+                        <small class="notes">手动模式下点击此按钮触发生成。</small>
+                    </div>
+                </fieldset>
+                
                 <div class="ape_settings_block">
                     <label for="ape_plot_master_prompt">剧情生成提示词</label>
                     <textarea id="ape_plot_master_prompt" class="text_pole" rows="15" placeholder="在此输入剧情生成的核心提示词..."></textarea>
