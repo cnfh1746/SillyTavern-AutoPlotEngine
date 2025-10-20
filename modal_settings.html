@@ -59,6 +59,14 @@
                     </button>
                     <small class="notes">手动模式下点击此按钮触发生成。</small>
                 </div>
+                <div class="ape_settings_block">
+                    <label for="ape_silent_mode"><strong>静默模式</strong></label>
+                    <label class="toggle-switch">
+                        <input id="ape_silent_mode" type="checkbox" />
+                        <span class="slider"></span>
+                    </label>
+                    <small class="notes">启用后关闭所有弹出通知，仅在控制台显示日志。适合后台自动运行。</small>
+                </div>
             </div>
 
             <!-- API配置 -->
@@ -189,6 +197,15 @@
                         <label for="ape_diary_target_character">目标角色</label>
                         <input id="ape_diary_target_character" type="text" class="text_pole" placeholder="输入角色名称（自动模式用）" />
                         <small class="notes">自动模式下，为该角色记录日志。留空则使用当前对话角色。</small>
+                    </div>
+                    
+                    <div class="ape_settings_block">
+                        <label for="ape_diary_smart_detection"><strong>智能多角色识别</strong></label>
+                        <label class="toggle-switch">
+                            <input id="ape_diary_smart_detection" type="checkbox" checked />
+                            <span class="slider"></span>
+                        </label>
+                        <small class="notes">启用后将自动识别对话中的所有角色并为每个角色生成日志（忽略目标角色设置）。</small>
                     </div>
                 </fieldset>
                 

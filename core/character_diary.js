@@ -10,6 +10,35 @@ import { loadWorldInfo, saveWorldInfo, createWorldInfoEntry } from "/scripts/wor
 const { toastr, TavernHelper } = window;
 
 /**
+ * 从最近的对话中智能识别所有角色
+ * @param {number} messageCount - 分析最近几条消息
+ * @returns {Array<string>} 角色名称数组
+ */
+function detectCharactersFromMessages(messageCount = 20) {
+    const context = window.SillyTavern.getContext();
+    const characterNames = new Set();
+    
+    if (context.chat && context.chat.length > 0) {
+        const recentMessages = context.chat.slice(-messageCount);
+        
+        recentMessages.forEach(msg => {
+            // 排除用户消息，只统计AI角色
+            if (!msg.is_user && msg.name) {
+                // 过滤掉系统消息和特殊标记
+                const name = msg.name.trim();
+                if (name && name !== 'System' && name !== '系统' && !name.startsWith('[')) {
+                    characterNames.add(name);
+                }
+            }
+        });
+    }
+    
+    const result = Array.from(characterNames);
+    mainLogger.info(`[角色识别] 在最近${messageCount}条消息中检测到 ${result.length} 个角色: ${result.join(', ')}`);
+    return result;
+}
+
+/**
  * 生成角色日志的提示词
  * @param {string} characterName - 角色名称
  * @param {string} recentMessages - 最近的聊天记录
@@ -301,12 +330,13 @@ async function createSeparateEntry(characterName, diaryEntry) {
 /**
  * 主函数：为指定角色生成并保存日志
  * @param {string} characterName - 角色名称
+ * @param {boolean} silentMode - 静默模式（不显示toastr通知）
  * @returns {Promise<boolean>} 是否成功
  */
-export async function addCharacterDiary(characterName) {
+export async function addCharacterDiary(characterName, silentMode = false) {
     if (!characterName || characterName.trim() === '') {
         mainLogger.error("[角色日志] 角色名称不能为空");
-        toastr.error("请输入角色名称", "角色日志");
+        if (!silentMode) toastr.error("请输入角色名称", "角色日志");
         return false;
     }
     
@@ -329,7 +359,7 @@ export async function addCharacterDiary(characterName) {
         
         if (!recentMessages) {
             mainLogger.error("[角色日志] 无法获取聊天记录");
-            toastr.error("无法获取聊天记录", "角色日志");
+            if (!silentMode) toastr.error("无法获取聊天记录", "角色日志");
             return false;
         }
         
@@ -360,14 +390,96 @@ export async function addCharacterDiary(characterName) {
         if (success) {
             mainLogger.success(`[角色日志] ========== 日志生成完成 ==========`);
             mainLogger.info(`[角色日志] 新增内容: ${diaryEntry}`);
-            toastr.success(`日志已成功保存`, "角色日志");
+            if (!silentMode) toastr.success(`角色"${characterName}"的日志已成功保存`, "角色日志");
         }
         
         return success;
         
     } catch (error) {
         mainLogger.error("[角色日志] 生成过程出错", error.message);
-        toastr.error(`生成日志失败: ${error.message}`, "角色日志");
+        if (!silentMode) toastr.error(`生成日志失败: ${error.message}`, "角色日志");
         return false;
     }
+}
+
+/**
+ * 批量生成多个角色的日志（智能多角色模式）
+ * @returns {Promise<Object>} 返回生成结果统计
+ */
+export async function addMultipleCharacterDiaries() {
+    const settings = getSettings();
+    
+    // 检查是否启用智能识别
+    if (!settings.diarySmartDetection) {
+        mainLogger.info("[批量日志] 智能多角色识别未启用，使用单角色模式");
+        return null;
+    }
+    
+    mainLogger.info("[批量日志] ========== 开始智能多角色日志生成 ==========");
+    
+    // 1. 检测所有角色
+    const characters = detectCharactersFromMessages(20);
+    
+    if (characters.length === 0) {
+        mainLogger.info("[批量日志] 未检测到任何角色");
+        return { total: 0, success: 0, failed: 0, skipped: 0 };
+    }
+    
+    mainLogger.info(`[批量日志] 准备为 ${characters.length} 个角色生成日志`);
+    
+    // 2. 静默模式配置
+    const silentMode = settings.silentMode || false;
+    
+    if (!silentMode) {
+        toastr.info(`正在为 ${characters.length} 个角色生成日志，请稍候...`, "批量日志", { timeOut: 3000 });
+    }
+    
+    // 3. 依次为每个角色生成日志
+    const results = {
+        total: characters.length,
+        success: 0,
+        failed: 0,
+        skipped: 0,
+        details: []
+    };
+    
+    for (const characterName of characters) {
+        try {
+            mainLogger.info(`[批量日志] [${results.success + results.failed + results.skipped + 1}/${characters.length}] 处理角色: ${characterName}`);
+            
+            const success = await addCharacterDiary(characterName, true); // 强制静默模式
+            
+            if (success) {
+                results.success++;
+                results.details.push({ character: characterName, status: 'success' });
+                mainLogger.success(`[批量日志] ✓ ${characterName} - 成功`);
+            } else {
+                results.skipped++;
+                results.details.push({ character: characterName, status: 'skipped' });
+                mainLogger.info(`[批量日志] ○ ${characterName} - 跳过（无重要事件）`);
+            }
+            
+            // 避免API请求过快，添加短暂延迟
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+        } catch (error) {
+            results.failed++;
+            results.details.push({ character: characterName, status: 'failed', error: error.message });
+            mainLogger.error(`[批量日志] ✗ ${characterName} - 失败: ${error.message}`);
+        }
+    }
+    
+    // 4. 输出汇总
+    mainLogger.success(`[批量日志] ========== 批量生成完成 ==========`);
+    mainLogger.info(`[批量日志] 总计: ${results.total} | 成功: ${results.success} | 跳过: ${results.skipped} | 失败: ${results.failed}`);
+    
+    if (!silentMode) {
+        toastr.success(
+            `批量日志生成完成！\n成功: ${results.success} | 跳过: ${results.skipped} | 失败: ${results.failed}`,
+            "批量日志",
+            { timeOut: 5000 }
+        );
+    }
+    
+    return results;
 }

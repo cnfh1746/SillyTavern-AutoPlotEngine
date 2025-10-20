@@ -69,6 +69,8 @@ const defaultSettings = {
     diaryTriggerThreshold: 15,              // 自动触发阈值（消息数）
     diaryStorageMode: 'append',             // 'append'（追加到原条目）or 'separate'（创建新条目）
     diaryTargetCharacter: '',               // 要记录日志的角色名称（自动模式用）
+    diarySmartDetection: true,              // 智能识别多角色模式
+    silentMode: false,                      // 静默模式（关闭所有toastr通知）
 };
 
 /**
@@ -122,6 +124,8 @@ export function initializeSettings() {
         'ape_diary_trigger_threshold': 'diaryTriggerThreshold',
         'ape_diary_storage_mode': 'diaryStorageMode',
         'ape_diary_target_character': 'diaryTargetCharacter',
+        'ape_diary_smart_detection': 'diarySmartDetection',
+        'ape_silent_mode': 'silentMode',
     };
 
     // Function to save all settings from UI

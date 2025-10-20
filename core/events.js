@@ -1,15 +1,23 @@
-// 快速响应部队 - 事件处理核心
-// 由Cline移植并重构
+/**
+ * @file events.js
+ * @description 事件处理 - 监听消息并触发自动功能
+ */
 
-import { getContext, extension_settings } from '/scripts/extensions.js';
-import { saveChatConditional, reloadCurrentChat } from '/script.js';
-import { checkAndFixWithAPI } from './api.js';
+import { getContext } from '/scripts/extensions.js';
+import { runPlotGenerationCycle } from './plot_engine.js';
+import { addCharacterDiary, addMultipleCharacterDiaries } from './character_diary.js';
+import { getSettings } from './settingsManager.js';
+import { mainLogger } from './logger.js';
 
-const extensionName = 'quick-response-force';
+const extensionName = 'SillyTavern-AutoPlotEngine';
+
+// 消息计数器
+let plotMessageCount = 0;
+let diaryMessageCount = 0;
 
 /**
- * 在收到新消息时触发的事件处理程序。
- * @param {object} data - 事件数据（可选）。
+ * 在收到新消息时触发
+ * @param {object} data - 事件数据
  */
 export async function onMessageReceived(data) {
     const context = getContext();
@@ -19,7 +27,7 @@ export async function onMessageReceived(data) {
         return;
     }
 
-    const settings = extension_settings[extensionName];
+    const settings = getSettings();
     const chat = context.chat;
 
     if (!chat || chat.length === 0) {
@@ -33,42 +41,89 @@ export async function onMessageReceived(data) {
         return;
     }
 
-    // 检查优化功能是否启用
-    if (!settings.enabled || !settings.optimizationEnabled || !settings.apiUrl) {
-        return;
+    // === 剧情大纲自动触发 ===
+    if (settings.enabled && settings.runMode === 'auto') {
+        plotMessageCount++;
+        mainLogger.info(`[主引擎] 剧情消息计数: ${plotMessageCount}/${settings.triggerThreshold}`);
+
+        if (plotMessageCount >= settings.triggerThreshold) {
+            mainLogger.info('[主引擎] 达到剧情生成阈值，自动触发...');
+            try {
+                await runPlotGenerationCycle();
+                plotMessageCount = 0; // 重置计数器
+                mainLogger.success('[主引擎] 自动剧情生成完成，计数器已重置');
+            } catch (error) {
+                mainLogger.error('[主引擎] 自动剧情生成失败', error.message);
+            }
+        }
     }
 
-    // 确保是AI对用户的直接回复，以避免处理系统消息或连续的AI消息
-    if (chat.length < 2 || !chat[chat.length - 2].is_user) {
-        console.log(`[${extensionName}] 检测到消息并非AI对用户的直接回复，已跳过优化。`);
-        return;
-    }
+    // === 角色日志自动触发 ===
+    if (settings.diaryEnabled && settings.diaryRunMode === 'auto') {
+        diaryMessageCount++;
+        mainLogger.info(`[主引擎] 日志消息计数: ${diaryMessageCount}/${settings.diaryTriggerThreshold}`);
 
-    // 获取上下文消息
-    const contextMessagesCount = settings.contextMessages || 2;
-    const startIndex = Math.max(0, chat.length - 1 - contextMessagesCount);
-    const contextMessages = chat.slice(startIndex, chat.length - 1);
+        if (diaryMessageCount >= settings.diaryTriggerThreshold) {
+            mainLogger.info('[主引擎] 达到日志生成阈值，自动触发...');
+            
+            try {
+                // 检查是否启用智能多角色识别
+                if (settings.diarySmartDetection) {
+                    mainLogger.info('[主引擎] 使用智能多角色识别模式');
+                    await addMultipleCharacterDiaries();
+                } else {
+                    // 单角色模式
+                    mainLogger.info('[主引擎] 使用单角色模式');
+                    let targetCharacter = settings.diaryTargetCharacter;
+                    
+                    // 如果没有指定目标角色，使用当前对话角色
+                    if (!targetCharacter || targetCharacter.trim() === '') {
+                        targetCharacter = context.name2 || latestMessage.name;
+                    }
 
-    // 调用核心优化API
-    const result = await checkAndFixWithAPI(latestMessage, contextMessages);
-
-    if (result && result.optimizedContent && result.optimizedContent !== latestMessage.mes) {
-        console.log(`[${extensionName}] 内容已优化，正在更新消息...`);
-        latestMessage.mes = result.optimizedContent;
-        await saveChatConditional(); // 保存聊天记录
-
-        // 如果设置为“刷新”模式，则刷新聊天界面
-        if (settings.optimizationMode === 'refresh') {
-            await reloadCurrentChat();
+                    if (targetCharacter) {
+                        const silentMode = settings.silentMode || false;
+                        await addCharacterDiary(targetCharacter, silentMode);
+                    } else {
+                        mainLogger.error('[主引擎] 无法确定目标角色，跳过日志生成');
+                    }
+                }
+                
+                diaryMessageCount = 0; // 重置计数器
+                mainLogger.success('[主引擎] 自动日志生成完成，计数器已重置');
+            } catch (error) {
+                mainLogger.error('[主引擎] 自动日志生成失败', error.message);
+                diaryMessageCount = 0; // 重置计数器避免一直卡住
+            }
         }
     }
 }
 
 /**
- * 在聊天内容改变时触发的事件处理程序。
- * 目前在仅优化模式下不需要复杂逻辑，保留为空或用于未来扩展。
+ * 在聊天内容改变时触发
  */
 export function onChatChanged() {
-    // 逻辑可以留空，因为我们移除了与“待处理总结”相关的逻辑
-    // console.log(`[${extensionName}] 聊天已变更。`);
+    // 重置计数器（切换聊天时）
+    plotMessageCount = 0;
+    diaryMessageCount = 0;
+    mainLogger.info('[主引擎] 聊天已切换，消息计数器已重置');
+}
+
+/**
+ * 手动重置计数器
+ */
+export function resetCounters() {
+    plotMessageCount = 0;
+    diaryMessageCount = 0;
+    mainLogger.info('[主引擎] 消息计数器已手动重置');
+}
+
+/**
+ * 获取当前计数器状态
+ */
+export function getCounterStatus() {
+    return {
+        plot: plotMessageCount,
+        diary: diaryMessageCount
+    };
 }
