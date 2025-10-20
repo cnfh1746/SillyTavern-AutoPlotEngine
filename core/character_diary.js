@@ -66,7 +66,7 @@ async function callDiaryAPI(settings, prompt) {
             { role: 'user', content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 200,
+        max_tokens: 500,  // 增加到500，确保有足够空间输出完整日志
         stream: false,
     };
     
