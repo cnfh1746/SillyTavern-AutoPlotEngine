@@ -90,11 +90,12 @@ async function callDiaryAPI(settings, prompt) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content?.trim();
         
-        if (content && content !== '无' && content !== 'null' && content.length > 0) {
+        // 只要AI返回了任何内容就接受（包括"无"）
+        if (content && content.length > 0) {
             mainLogger.success(`[角色日志] 日志生成成功: ${content}`);
             return content;
         } else {
-            mainLogger.info("[角色日志] 没有重要事件需要记录");
+            mainLogger.error("[角色日志] AI未返回任何内容");
             return null;
         }
 
