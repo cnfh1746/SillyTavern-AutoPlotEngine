@@ -322,20 +322,14 @@ async function callDiaryAPI(settings, prompt) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content?.trim();
         
-        // 检查AI是否返回"无"（表示没有重要事件）
-        if (!content || content.length === 0) {
+        // 只要AI返回了任何内容就接受（包括"无"）
+        if (content && content.length > 0) {
+            mainLogger.success(`[角色日志] 日志生成成功: ${content}`);
+            return content;
+        } else {
             mainLogger.error("[角色日志] AI未返回任何内容");
             return null;
         }
-        
-        // 如果AI明确返回"无"，表示没有重要事件需要记录
-        if (content.trim() === '无' || content.trim().toLowerCase() === 'none') {
-            mainLogger.info(`[角色日志] AI判断没有重要事件需要记录`);
-            return null;
-        }
-        
-        mainLogger.success(`[角色日志] 日志生成成功: ${content}`);
-        return content;
 
     } catch (error) {
         mainLogger.error("[角色日志] API调用失败", error.message);
@@ -371,12 +365,14 @@ async function appendToOriginalEntry(characterName, diaryEntry) {
     try {
         mainLogger.info(`[角色日志] [追加模式] 查找角色"${characterName}"的世界书条目...`);
         
-        // 获取当前聊天的世界书名称
-        const context = window.SillyTavern.getContext();
-        const lorebookName = context.worldInfoName;
+        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
+            throw new Error("TavernHelper API 不可用");
+        }
+        
+        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
         
         if (!lorebookName) {
-            throw new Error("当前聊天没有关联世界书，请先为角色绑定世界书");
+            throw new Error("当前角色没有绑定世界书");
         }
         
         mainLogger.info(`[角色日志] 加载世界书: ${lorebookName}`);
@@ -443,12 +439,14 @@ async function createSeparateEntry(characterName, diaryEntry) {
     try {
         mainLogger.info(`[角色日志] [独立模式] 为角色"${characterName}"创建/更新日志条目...`);
         
-        // 获取当前聊天的世界书名称
-        const context = window.SillyTavern.getContext();
-        const lorebookName = context.worldInfoName;
+        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
+            throw new Error("TavernHelper API 不可用");
+        }
+        
+        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
         
         if (!lorebookName) {
-            throw new Error("当前聊天没有关联世界书，请先为角色绑定世界书");
+            throw new Error("当前角色没有绑定世界书");
         }
         
         mainLogger.info(`[角色日志] 加载世界书: ${lorebookName}`);
@@ -677,13 +675,6 @@ ${recentMessages}
         };
         
         for (const characterName of result.characters) {
-            // 在每个角色处理前检查停止信号
-            if (checkShouldStop()) {
-                mainLogger.warn(`[AI指令模式] 检测到停止信号，中断批量处理`);
-                if (!silentMode) toastr.info("批量生成已停止", "AI指令模式");
-                break; // 跳出循环
-            }
-            
             try {
                 mainLogger.info(`[AI指令模式] [${batchResults.success + batchResults.failed + batchResults.skipped + 1}/${batchResults.total}] 处理角色: ${characterName}`);
                 
@@ -698,25 +689,12 @@ ${recentMessages}
                     mainLogger.info(`[AI指令模式] ○ ${characterName} - 跳过`);
                 }
                 
-                // 延迟避免API请求过快，并在延迟期间检查停止信号
-                for (let i = 0; i < 10; i++) {
-                    if (checkShouldStop()) {
-                        mainLogger.warn(`[AI指令模式] 延迟期间检测到停止信号`);
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 100)); // 分成10个100ms
-                }
+                // 延迟避免API请求过快
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
             } catch (error) {
                 batchResults.failed++;
                 mainLogger.error(`[AI指令模式] ✗ ${characterName} - 失败: ${error.message}`);
-                
-                // 如果是429错误（速率限制），自动停止避免继续浪费请求
-                if (error.message.includes('429')) {
-                    mainLogger.error(`[AI指令模式] 遇到速率限制(429)，自动停止批量处理`);
-                    if (!silentMode) toastr.error("API速率限制，已自动停止", "AI指令模式");
-                    break;
-                }
             }
         }
         
@@ -739,7 +717,7 @@ ${recentMessages}
         if (!silentMode) {
             toastr.error(`AI指令处理失败: ${error.message}`, "AI指令模式");
         }
-        throw error; // 向上抛出异常，让外层finally处理
+        return false;
     }
 }
 
@@ -873,26 +851,81 @@ export async function addCharacterDiary(userInput, silentMode = false) {
             return false;
         }
         
-        // 简单规则判断：包含"请"、"所有"、"表格"等关键词视为AI指令
-        const instructionKeywords = ['请', '所有', '表格', '批量', '全部', '分析', '读取', '女性', '男性', '角色'];
-        const isInstruction = instructionKeywords.some(keyword => userInput.includes(keyword)) && userInput.length > 10;
-        
-        if (isInstruction) {
-            mainLogger.info(`[角色日志] 检测到AI指令关键词，切换到AI指令处理模式`);
-            return await processAIInstruction(userInput, silentMode);
+        // 让AI判断用户输入的是"角色名"还是"指令"
+        const settings = getSettings();
+        const judgePrompt = `你是一个智能助手。请判断用户输入的是"角色名称"还是"AI指令"。
+
+用户输入：
+${userInput}
+
+判断规则：
+- 如果是简短的名字（如：炽霞、长离、秧秧），判断为"角色名称"
+- 如果是完整的句子或请求（如：请分析对话、为所有角色生成日志），判断为"AI指令"
+
+请按以下JSON格式输出：
+{
+  "type": "character_name" 或 "ai_instruction",
+  "reason": "判断理由"
+}
+
+只输出JSON，不要有其他文字。`;
+
+        let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
+        if (!apiUrl.endsWith('/chat/completions')) {
+            apiUrl += '/chat/completions';
         }
         
-        mainLogger.info(`[角色日志] 按单个角色名称处理: ${userInput}`);
+        const body = {
+            model: settings.model,
+            messages: [
+                { role: 'user', content: judgePrompt }
+            ],
+            temperature: 0.1,
+            max_tokens: 20000,
+            stream: false,
+        };
+        
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content?.trim();
+            
+            if (content) {
+                let cleanContent = content.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+                const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
+                const result = JSON.parse(jsonText);
+                
+                mainLogger.info(`[角色日志] AI判断: ${result.type} - ${result.reason}`);
+                
+                // 检查停止信号
+                if (checkShouldStop()) {
+                    if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+                    return false;
+                }
+                
+                if (result.type === 'ai_instruction') {
+                    mainLogger.info(`[角色日志] 切换到AI指令处理模式`);
+                    return await processAIInstruction(userInput, silentMode);
+                }
+            }
+        }
     } catch (error) {
-        mainLogger.warn(`[角色日志] 判断失败，按角色名称处理: ${error.message}`);
+        mainLogger.warn(`[角色日志] AI判断失败，按角色名称处理: ${error.message}`);
     }
     
     // 默认按角色名称处理
     const characterName = userInput;
     mainLogger.info(`[角色日志] ========== 开始生成角色日志 ==========`);
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
-    
-    const settings = getSettings(); // 添加这一行！
     
     try {
         // 检查日志功能是否启用
