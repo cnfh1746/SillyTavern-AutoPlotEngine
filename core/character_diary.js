@@ -374,11 +374,11 @@ ${recentMessages}
         const body = {
             model: settings.model,
             messages: [
-                { role: 'system', content: '你是一个智能日志管理助手，擅长分析对话并识别需要记录日志的角色。' },
+                { role: 'system', content: '你是一个智能日志管理助手，擅长分析对话并识别需要记录日志的角色。只输出JSON格式的结果，不要添加任何解释。' },
                 { role: 'user', content: aiPrompt }
             ],
             temperature: 0.3, // 降低温度提高准确性
-            max_tokens: 1000,
+            max_tokens: 2000, // 增加token限制
             stream: false,
         };
         
@@ -404,24 +404,43 @@ ${recentMessages}
         
         mainLogger.info(`[AI指令模式] AI响应: ${content}`);
         
-        // 3. 解析JSON
+        // 3. 解析JSON（增强容错）
         let result;
         try {
             // 清理可能的markdown代码块标记
-            let cleanContent = content;
+            let cleanContent = content.trim();
             
             // 移除markdown代码块标记
-            cleanContent = cleanContent.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+            cleanContent = cleanContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
             
             // 提取JSON对象
+            let jsonText = cleanContent;
             const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-                result = JSON.parse(jsonMatch[0]);
-            } else {
-                result = JSON.parse(cleanContent);
+                jsonText = jsonMatch[0];
             }
+            
+            // 尝试修复不完整的JSON
+            // 如果JSON被截断（缺少reason字段的结束），尝试补全
+            if (!jsonText.includes('"reason"') || !jsonText.trim().endsWith('}')) {
+                mainLogger.warn(`[AI指令模式] JSON可能不完整，尝试修复...`);
+                
+                // 如果有characters数组但缺少reason，补全基本结构
+                if (jsonText.includes('"characters"')) {
+                    // 提取characters数组
+                    const charMatch = jsonText.match(/"characters"\s*:\s*\[([^\]]*)\]/);
+                    if (charMatch) {
+                        const charsContent = charMatch[0];
+                        jsonText = `{${charsContent},"reason":"AI响应被截断"}`;
+                    }
+                }
+            }
+            
+            result = JSON.parse(jsonText);
+            
         } catch (e) {
             mainLogger.error(`[AI指令模式] 原始响应: ${content}`);
+            mainLogger.error(`[AI指令模式] JSON解析失败: ${e.message}`);
             throw new Error(`无法解析AI响应为JSON: ${e.message}`);
         }
         
