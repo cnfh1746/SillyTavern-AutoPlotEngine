@@ -666,7 +666,8 @@ ${recentMessages}
             try {
                 mainLogger.info(`[AI指令模式] [${batchResults.success + batchResults.failed + batchResults.skipped + 1}/${batchResults.total}] 处理角色: ${characterName}`);
                 
-                const success = await addCharacterDiary(characterName, true);
+                // 直接调用内部函数，绕过 isDiaryProcessing 检查
+                const success = await generateSingleDiary(characterName, true);
                 
                 if (success) {
                     batchResults.success++;
@@ -704,6 +705,103 @@ ${recentMessages}
         if (!silentMode) {
             toastr.error(`AI指令处理失败: ${error.message}`, "AI指令模式");
         }
+        return false;
+    }
+}
+
+/**
+ * 内部函数：直接生成单个角色日志（不检查处理标志）
+ * @param {string} characterName - 角色名称
+ * @param {boolean} silentMode - 静默模式
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function generateSingleDiary(characterName, silentMode = false) {
+    mainLogger.info(`[角色日志] ========== 开始生成角色日志 ==========`);
+    mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
+    
+    const settings = getSettings();
+    
+    try {
+        // 检查日志功能是否启用
+        if (!settings.diaryEnabled) {
+            mainLogger.info("[角色日志] 日志功能已禁用");
+            return false;
+        }
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
+        }
+        
+        // 1. 获取最近的聊天记录
+        mainLogger.info("[角色日志] 步骤 1/3: 正在收集最近的对话...");
+        const recentMessages = getRecentMessages(10);
+        
+        if (!recentMessages) {
+            mainLogger.error("[角色日志] 无法获取聊天记录");
+            if (!silentMode) toastr.error("无法获取聊天记录", "角色日志");
+            return false;
+        }
+        
+        mainLogger.info(`[角色日志] 对话收集完成，长度: ${recentMessages.length} 字符`);
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
+        }
+        
+        // 2. 调用AI生成日志条目
+        mainLogger.info("[角色日志] 步骤 2/3: 正在调用AI生成日志...");
+        const prompt = buildDiaryPrompt(characterName, recentMessages);
+        let diaryEntry = await callDiaryAPI(settings, prompt);
+        
+        if (!diaryEntry) {
+            mainLogger.info("[角色日志] 本次对话没有需要记录的重要事件");
+            return false;
+        }
+        
+        // 替换 {{user}} 为实际用户名
+        const context = window.SillyTavern.getContext();
+        const userName = context.name1 || 'user';
+        if (diaryEntry.includes('{{user}}')) {
+            const originalEntry = diaryEntry;
+            diaryEntry = diaryEntry.replace(/\{\{user\}\}/g, userName);
+            mainLogger.info(`[角色日志] 已将日志中的 {{user}} 替换为 ${userName}`);
+            mainLogger.debug(`[角色日志] 替换前: ${originalEntry}`);
+            mainLogger.debug(`[角色日志] 替换后: ${diaryEntry}`);
+        }
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
+        }
+        
+        // 3. 根据存储模式保存日志
+        mainLogger.info("[角色日志] 步骤 3/3: 正在保存日志...");
+        const storageMode = settings.diaryStorageMode || 'append';
+        mainLogger.info(`[角色日志] 存储模式: ${storageMode === 'append' ? '追加到原条目' : '创建独立条目'}`);
+        
+        let success = false;
+        if (storageMode === 'separate') {
+            success = await createSeparateEntry(characterName, diaryEntry);
+        } else {
+            success = await appendToOriginalEntry(characterName, diaryEntry);
+        }
+        
+        if (success) {
+            mainLogger.success(`[角色日志] ========== 日志生成完成 ==========`);
+            mainLogger.info(`[角色日志] 新增内容: ${diaryEntry}`);
+            if (!silentMode) toastr.success(`角色"${characterName}"的日志已成功保存`, "角色日志");
+        }
+        
+        return success;
+        
+    } catch (error) {
+        mainLogger.error("[角色日志] 生成过程出错", error.message);
+        if (!silentMode) toastr.error(`生成日志失败: ${error.message}`, "角色日志");
         return false;
     }
 }
