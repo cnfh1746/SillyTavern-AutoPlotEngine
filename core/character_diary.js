@@ -46,25 +46,24 @@ function detectCharactersFromMessages(messageCount = 20) {
  */
 function buildDiaryPrompt(characterName, recentMessages) {
     const settings = getSettings();
-    const customPrompt = settings.diaryPrompt || `你是一个专业的事件记录员。请分析下面的对话内容，为角色"${characterName}"生成一条非常精炼的历史事件记录。
+    
+    // 如果用户设置了自定义提示词，完全使用用户的提示词
+    // 否则使用默认提示词
+    const defaultPrompt = `分析以下对话，为角色"${characterName}"生成一条日志记录。
 
-要求：
-1. 只记录对该角色有重要意义的事件
-2. 使用第一人称（"我"）的视角
-3. 格式严格遵循：YYYYMMDD 简短的事件描述（10-20字以内）
-4. 只输出一条最重要的事件，不要输出多条
-5. 如果对话中没有重要事件发生，请输出"无"
-
-示例格式：
-20250607 {{user}}送了我一个项链，我很喜欢
-20250608 在咖啡厅遇到了老朋友
+格式：YYYYMMDD 事件描述
 
 对话内容：
 ${recentMessages}
 
-请生成一条事件记录：`;
+请生成日志：`;
 
-    return customPrompt.replace(/\$\{characterName\}/g, characterName).replace(/\$\{recentMessages\}/g, recentMessages);
+    const customPrompt = settings.diaryPrompt || defaultPrompt;
+    
+    // 替换变量
+    return customPrompt
+        .replace(/\$\{characterName\}/g, characterName)
+        .replace(/\$\{recentMessages\}/g, recentMessages);
 }
 
 /**
@@ -85,17 +84,14 @@ async function callDiaryAPI(settings, prompt) {
         apiUrl += '/chat/completions';
     }
     
+    // 从设置中获取参数，如果没有则使用默认值
     const body = {
         model: settings.model,
         messages: [
-            { 
-                role: 'system', 
-                content: '你是一个专业的事件记录员，擅长从对话中提取关键事件并生成简洁的日志条目。'
-            },
             { role: 'user', content: prompt }
         ],
-        temperature: 0.7,
-        max_tokens: 500,  // 增加到500，确保有足够空间输出完整日志
+        temperature: settings.temperature || 0.7,
+        max_tokens: settings.maxTokens || 500,
         stream: false,
     };
     
