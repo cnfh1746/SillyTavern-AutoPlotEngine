@@ -235,25 +235,14 @@ function buildDiaryPrompt(characterName, recentMessages) {
     
     // 如果用户设置了自定义提示词，完全使用用户的提示词
     // 否则使用默认提示词
-    const defaultPrompt = `你是一个专业的历史记录助手。请分析以下数据，为角色"${characterName}"生成详细的日志记录。
+    const defaultPrompt = `分析以下对话，为角色"${characterName}"生成一条日志记录。
 
-**重要说明**：
-- 根据数据量自主决定生成多少条日志（可能是1条，也可能是10-20条）
-- 数据量大时，应该提取多个重要事件分别记录
-- 数据量小时，可能只需要1条日志或不生成
-
-**格式要求**：
-每条日志格式：YYYYMMDD 事件描述
-多条日志请用换行分隔
-
-**可用数据**：
-表格数据：
-${tableData}
+格式：YYYYMMDD 事件描述
 
 对话内容：
 ${recentMessages}
 
-请分析以上数据，为"${characterName}"生成合适数量的日志记录：`;
+请生成日志：`;
 
     const customPrompt = settings.diaryPrompt || defaultPrompt;
     
@@ -290,15 +279,14 @@ async function callDiaryAPI(settings, prompt) {
         apiUrl += '/chat/completions';
     }
     
-    // 从设置中获取参数
-    // 使用主设置的 maxTokens（通常是 4000-8000），足够生成多条日志
+    // 从设置中获取参数，如果没有则使用默认值
     const body = {
         model: settings.model,
         messages: [
             { role: 'user', content: prompt }
         ],
         temperature: settings.temperature || 0.7,
-        max_tokens: settings.maxTokens || 4000, // 使用更大的默认值，支持生成多条日志
+        max_tokens: settings.maxTokens || 500,
         stream: false,
     };
     
