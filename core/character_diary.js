@@ -407,14 +407,21 @@ ${recentMessages}
         // 3. 解析JSON
         let result;
         try {
-            // 尝试提取JSON（可能被markdown包裹）
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            // 清理可能的markdown代码块标记
+            let cleanContent = content;
+            
+            // 移除markdown代码块标记
+            cleanContent = cleanContent.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+            
+            // 提取JSON对象
+            const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 result = JSON.parse(jsonMatch[0]);
             } else {
-                result = JSON.parse(content);
+                result = JSON.parse(cleanContent);
             }
         } catch (e) {
+            mainLogger.error(`[AI指令模式] 原始响应: ${content}`);
             throw new Error(`无法解析AI响应为JSON: ${e.message}`);
         }
         
