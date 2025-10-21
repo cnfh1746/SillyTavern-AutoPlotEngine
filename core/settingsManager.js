@@ -9,6 +9,7 @@ import { fetchModels, runPlotGenerationCycle } from './plot_engine.js';
 import { clearAllLogs, mainLogger } from './logger.js';
 import { extractCharacterInfo } from './character_extractor.js';
 import { addCharacterDiary } from './character_diary.js';
+import { deleteWorldBookEntries, deleteAllDiaryEntries } from './worldbook_manager.js';
 import { hideModal } from './drawer.js';
 
 const extensionName = "SillyTavern-AutoPlotEngine";
@@ -415,6 +416,70 @@ export function initializeSettings() {
             }
         });
     });
+
+    // Bind worldbook delete buttons
+    const deleteInstructionInput = document.getElementById('ape_delete_instruction');
+    const deleteEntriesButton = document.getElementById('ape_delete_entries_button');
+    const deleteAllDiariesButton = document.getElementById('ape_delete_all_diaries_button');
+
+    if (deleteEntriesButton && deleteInstructionInput) {
+        deleteEntriesButton.addEventListener('click', async () => {
+            const instruction = deleteInstructionInput.value.trim();
+            
+            if (!instruction) {
+                toastr.error("请输入删除指令", "世界书管理");
+                return;
+            }
+            
+            // 二次确认
+            if (!confirm(`⚠️ 确定要执行删除操作吗？\n\n指令：${instruction}\n\n此操作不可撤销！`)) {
+                return;
+            }
+            
+            mainLogger.info(`开始执行删除指令: ${instruction}`);
+            
+            deleteEntriesButton.disabled = true;
+            const originalHTML = deleteEntriesButton.innerHTML;
+            deleteEntriesButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 分析中...';
+            
+            try {
+                const result = await deleteWorldBookEntries(instruction);
+                
+                if (result.deleted > 0) {
+                    deleteInstructionInput.value = ''; // 清空输入框
+                }
+            } catch (error) {
+                mainLogger.error(`[世界书管理] 删除失败: ${error.message}`);
+            } finally {
+                deleteEntriesButton.disabled = false;
+                deleteEntriesButton.innerHTML = originalHTML;
+            }
+        });
+    }
+
+    if (deleteAllDiariesButton) {
+        deleteAllDiariesButton.addEventListener('click', async () => {
+            // 二次确认
+            if (!confirm('⚠️ 确定要删除所有日志条目吗？\n\n此操作将删除所有备注包含"角色日志"的条目，不可撤销！')) {
+                return;
+            }
+            
+            mainLogger.info("开始删除所有日志条目");
+            
+            deleteAllDiariesButton.disabled = true;
+            const originalHTML = deleteAllDiariesButton.innerHTML;
+            deleteAllDiariesButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 删除中...';
+            
+            try {
+                await deleteAllDiaryEntries();
+            } catch (error) {
+                mainLogger.error(`[世界书管理] 删除失败: ${error.message}`);
+            } finally {
+                deleteAllDiariesButton.disabled = false;
+                deleteAllDiariesButton.innerHTML = originalHTML;
+            }
+        });
+    }
 
     // Modal save button
     const modalSaveButton = document.getElementById('ape_modal_save');

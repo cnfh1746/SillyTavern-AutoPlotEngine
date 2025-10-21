@@ -22,6 +22,10 @@ async function detectCharactersFromMessages() {
         return [];
     }
     
+    // 获取用户名称（用于排除）
+    const userName = context.name1 || 'user';
+    mainLogger.info(`[角色识别] 当前用户名: ${userName}`);
+    
     // 使用设置中的消息数量（默认为1，即只读最新的AI消息）
     const messageCount = settings.diaryMessageCount || 1;
     mainLogger.info(`[角色识别] 分析最近 ${messageCount} 条AI消息`);
@@ -43,24 +47,42 @@ async function detectCharactersFromMessages() {
     
     mainLogger.info(`[角色识别] 收集到 ${recentAIMessages.length} 条AI消息，总长度: ${messagesText.length} 字符`);
     
-    // 完全让AI自己识别，不做任何预处理
-    const aiPrompt = `请分析以下对话，识别出所有需要记录日志的角色。
+    // 精确识别：只识别正在现场参与对话和事件的角色
+    const aiPrompt = `请分析以下对话内容，识别出【正在现场、正在参与当前事件】的角色。
 
 对话内容：
 ${messagesText}
 
-识别规则：
-1. 识别对话中出现的真实角色名（如：炽霞、长离、秧秧等有独立人格的角色）
-2. 排除以下内容：
-   - {{user}}（这是用户角色，不需要记录）
-   - 世界名、游戏名（如：鸣潮、原神、崩坏）
-   - 系统名称、组织名、地点名
-   - 其他非人物的名词
+🎯 核心识别标准：
+只有同时满足以下条件的角色才需要识别：
+1. 在对话正文中有实际出现（有台词、动作、描写）
+2. 正在参与当前场景的事件（不是被提及的远方角色）
+3. 是有独立人格的NPC角色（不是玩家、不是地名、不是组织名）
 
-请按以下JSON格式输出：
+✅ 应该识别的例子：
+- "长离发出了一声极轻的、带着一丝不屑的鼻音" → 识别"长离"
+- "阿布摇着尾巴跑来" → 识别"阿布"
+- "秧秧笑着说道" → 识别"秧秧"
+
+❌ 不应该识别的例子：
+- "${userName}"（这是玩家角色，绝对不要识别）
+- "{{user}}"（这是玩家变量，绝对不要识别）
+- "📱当前章节（登场人物：今汐/辛夷）" → 这是UI，不识别
+- "[节点05] 在虹镇见到辛夷" → 这是未来剧情，不识别
+- "今汐正冒险解救岁主'角'" → 这只是提及，如果今汐和岁主没在正文出现，不识别
+- "残星会成员弗洛洛在暗中观察" → 如果只是旁白提及，没有实际对话/动作，不识别
+
+🚫 必须排除（非常重要）：
+- "${userName}"（当前玩家名，绝对不要识别）
+- {{user}}（玩家变量）
+- 仅在状态栏/表格/时间线中提到的角色
+- 仅被提及但不在现场的角色
+- 世界名、游戏名、地名、组织名
+
+请严格按照以上标准，输出JSON格式：
 {
   "characters": ["角色1", "角色2"],
-  "reason": "识别依据的简短说明"
+  "reason": "简短说明这些角色为什么在场"
 }
 
 只输出JSON，不要有其他文字。`;
@@ -156,7 +178,18 @@ ${messagesText}
         mainLogger.info(`[角色识别] AI识别到 ${result.characters.length} 个角色: ${result.characters.join(', ')}`);
         mainLogger.info(`[角色识别] 识别依据: ${result.reason || '未提供'}`);
         
-        return result.characters;
+        // 过滤掉用户名（双重保险）
+        const filteredCharacters = result.characters.filter(char => {
+            const isUser = char === userName || char === '{{user}}' || char.toLowerCase() === 'user';
+            if (isUser) {
+                mainLogger.info(`[角色识别] 过滤掉用户角色: ${char}`);
+            }
+            return !isUser;
+        });
+        
+        mainLogger.info(`[角色识别] 过滤后剩余 ${filteredCharacters.length} 个角色: ${filteredCharacters.join(', ')}`);
+        
+        return filteredCharacters;
         
     } catch (error) {
         mainLogger.error(`[角色识别] AI识别失败: ${error.message}`);
@@ -750,11 +783,22 @@ ${userInput}
         // 2. 调用AI生成日志条目
         mainLogger.info("[角色日志] 步骤 2/3: 正在调用AI生成日志...");
         const prompt = buildDiaryPrompt(characterName, recentMessages);
-        const diaryEntry = await callDiaryAPI(settings, prompt);
+        let diaryEntry = await callDiaryAPI(settings, prompt);
         
         if (!diaryEntry) {
             mainLogger.info("[角色日志] 本次对话没有需要记录的重要事件");
             return false;
+        }
+        
+        // 替换 {{user}} 为实际用户名
+        const context = window.SillyTavern.getContext();
+        const userName = context.name1 || 'user';
+        if (diaryEntry.includes('{{user}}')) {
+            const originalEntry = diaryEntry;
+            diaryEntry = diaryEntry.replace(/\{\{user\}\}/g, userName);
+            mainLogger.info(`[角色日志] 已将日志中的 {{user}} 替换为 ${userName}`);
+            mainLogger.debug(`[角色日志] 替换前: ${originalEntry}`);
+            mainLogger.debug(`[角色日志] 替换后: ${diaryEntry}`);
         }
         
         // 3. 根据存储模式保存日志
