@@ -322,14 +322,20 @@ async function callDiaryAPI(settings, prompt) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content?.trim();
         
-        // 只要AI返回了任何内容就接受（包括"无"）
-        if (content && content.length > 0) {
-            mainLogger.success(`[角色日志] 日志生成成功: ${content}`);
-            return content;
-        } else {
+        // 检查AI是否返回"无"（表示没有重要事件）
+        if (!content || content.length === 0) {
             mainLogger.error("[角色日志] AI未返回任何内容");
             return null;
         }
+        
+        // 如果AI明确返回"无"，表示没有重要事件需要记录
+        if (content.trim() === '无' || content.trim().toLowerCase() === 'none') {
+            mainLogger.info(`[角色日志] AI判断没有重要事件需要记录`);
+            return null;
+        }
+        
+        mainLogger.success(`[角色日志] 日志生成成功: ${content}`);
+        return content;
 
     } catch (error) {
         mainLogger.error("[角色日志] API调用失败", error.message);
@@ -365,14 +371,12 @@ async function appendToOriginalEntry(characterName, diaryEntry) {
     try {
         mainLogger.info(`[角色日志] [追加模式] 查找角色"${characterName}"的世界书条目...`);
         
-        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
-            throw new Error("TavernHelper API 不可用");
-        }
-        
-        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
+        // 获取当前聊天的世界书名称
+        const context = window.SillyTavern.getContext();
+        const lorebookName = context.worldInfoName;
         
         if (!lorebookName) {
-            throw new Error("当前角色没有绑定世界书");
+            throw new Error("当前聊天没有关联世界书，请先为角色绑定世界书");
         }
         
         mainLogger.info(`[角色日志] 加载世界书: ${lorebookName}`);
@@ -439,14 +443,12 @@ async function createSeparateEntry(characterName, diaryEntry) {
     try {
         mainLogger.info(`[角色日志] [独立模式] 为角色"${characterName}"创建/更新日志条目...`);
         
-        if (!TavernHelper || typeof TavernHelper.getCurrentCharPrimaryLorebook !== 'function') {
-            throw new Error("TavernHelper API 不可用");
-        }
-        
-        const lorebookName = await TavernHelper.getCurrentCharPrimaryLorebook();
+        // 获取当前聊天的世界书名称
+        const context = window.SillyTavern.getContext();
+        const lorebookName = context.worldInfoName;
         
         if (!lorebookName) {
-            throw new Error("当前角色没有绑定世界书");
+            throw new Error("当前聊天没有关联世界书，请先为角色绑定世界书");
         }
         
         mainLogger.info(`[角色日志] 加载世界书: ${lorebookName}`);
@@ -737,7 +739,7 @@ ${recentMessages}
         if (!silentMode) {
             toastr.error(`AI指令处理失败: ${error.message}`, "AI指令模式");
         }
-        return false;
+        throw error; // 向上抛出异常，让外层finally处理
     }
 }
 
