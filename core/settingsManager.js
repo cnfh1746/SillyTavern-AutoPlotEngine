@@ -459,6 +459,17 @@ export function initializeSettings() {
             });
         }
 
+        // 绑定停止按钮
+        const stopDiaryButton = document.getElementById('ape_stop_diary_button');
+        if (stopDiaryButton) {
+            stopDiaryButton.addEventListener('click', async () => {
+                mainLogger.warn('[设置管理] 用户点击停止按钮');
+                const { stopDiaryGeneration } = await import('./character_diary.js');
+                stopDiaryGeneration();
+                toastr.info('正在停止日志生成...', '角色日志');
+            });
+        }
+
         addDiaryButton.addEventListener('click', async () => {
             const characterName = diaryCharacterNameInput.value.trim();
             

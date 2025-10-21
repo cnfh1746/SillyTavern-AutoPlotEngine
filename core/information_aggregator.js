@@ -176,6 +176,72 @@ async function getCharacterCards() {
 }
 
 /**
+ * 从 st-memory-enhancement 插件读取表格数据
+ * @returns {string} 格式化后的表格文本
+ */
+function getTableData() {
+    try {
+        if (window.stMemoryEnhancement && 
+            typeof window.stMemoryEnhancement.ext_exportAllTablesAsJson === 'function') {
+            const tableJson = window.stMemoryEnhancement.ext_exportAllTablesAsJson();
+            return formatTableDataForLLM(tableJson);
+        } else {
+            mainLogger.info('[信息聚合] 未检测到记忆增强插件或版本不兼容');
+            return '未检测到记忆增强插件或版本不兼容。';
+        }
+    } catch (error) {
+        mainLogger.error(`[信息聚合] 读取表格数据失败: ${error.message}`);
+        return '读取表格数据时发生错误。';
+    }
+}
+
+/**
+ * 格式化表格数据为LLM可读文本
+ * @param {object} jsonData - ext_exportAllTablesAsJson 返回的JSON对象
+ * @returns {string} 格式化后的文本
+ */
+function formatTableDataForLLM(jsonData) {
+    if (!jsonData || typeof jsonData !== 'object' || Object.keys(jsonData).length === 0) {
+        return '当前无任何可用的表格数据。';
+    }
+
+    let output = '以下是角色记忆表格数据：\n\n';
+
+    for (const sheetId in jsonData) {
+        if (Object.prototype.hasOwnProperty.call(jsonData, sheetId)) {
+            const sheet = jsonData[sheetId];
+            // 确保表格有名称，且内容至少包含表头和一行数据
+            if (sheet && sheet.name && sheet.content && sheet.content.length > 1) {
+                output += `## 表格: ${sheet.name}\n`;
+                const headers = sheet.content[0].slice(1); // 第一行是表头，第一个元素通常为空
+                const rows = sheet.content.slice(1);
+
+                rows.forEach((row, rowIndex) => {
+                    const rowData = row.slice(1);
+                    let rowOutput = '';
+                    let hasContent = false;
+                    
+                    headers.forEach((header, index) => {
+                        const cellValue = rowData[index];
+                        if (cellValue !== null && cellValue !== undefined && String(cellValue).trim() !== '') {
+                            rowOutput += `  - ${header}: ${cellValue}\n`;
+                            hasContent = true;
+                        }
+                    });
+
+                    if (hasContent) {
+                        output += `\n### 记录 ${rowIndex + 1}\n${rowOutput}`;
+                    }
+                });
+            }
+        }
+    }
+    
+    output += '\n--- 表格数据结束 ---\n';
+    return output;
+}
+
+/**
  * Reads and parses the content of tables.
  * This is an approximation as there's no direct API.
  * It looks for chat messages that might contain rendered table data.
@@ -246,7 +312,22 @@ export async function getAllContext() {
     fullContext += charCards;
     fullContext += lorebooks;
     fullContext += tables;
+    
+    // 添加来自记忆增强插件的表格数据（优先级更高）
+    const memoryTableData = getTableData();
+    if (memoryTableData && !memoryTableData.includes('未检测到') && !memoryTableData.includes('错误')) {
+        fullContext += "### 记忆增强表格数据\n\n" + memoryTableData + "\n\n";
+    }
+    
     fullContext += "### 近期对话\n\n" + chatHistory;
 
     return fullContext;
+}
+
+/**
+ * 导出表格数据读取函数供其他模块使用
+ * @returns {string} 格式化后的表格文本
+ */
+export function getMemoryTableData() {
+    return getTableData();
 }

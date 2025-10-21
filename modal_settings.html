@@ -241,9 +241,14 @@
                     <h4>手动生成</h4>
                     <label for="ape_diary_character_name">角色名称或AI指令</label>
                     <textarea id="ape_diary_character_name" class="text_pole" rows="3" placeholder="输入角色名称，或输入AI指令让AI分析表格批量生成多个角色的日志&#10;&#10;示例1: 小明&#10;示例2: 请读取对话中的表格，为表格中提到的所有角色生成日志"></textarea>
-                    <button id="ape_add_diary_button" class="menu_button" style="margin-top: 10px;">
-                        <i class="fas fa-pen"></i> 立即生成日志
-                    </button>
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button id="ape_add_diary_button" class="menu_button" style="flex: 1;">
+                            <i class="fas fa-pen"></i> 立即生成日志
+                        </button>
+                        <button id="ape_stop_diary_button" class="menu_button" style="flex: 0 0 auto; background-color: #dc3545;">
+                            <i class="fas fa-stop"></i> 停止
+                        </button>
+                    </div>
                     <small class="notes">
                         <strong>支持两种模式：</strong><br>
                         1️⃣ <strong>角色名称模式</strong>：直接输入角色名如"小明"，为该角色生成日志<br>

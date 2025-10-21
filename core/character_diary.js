@@ -5,9 +5,33 @@
 
 import { mainLogger } from './logger.js';
 import { getSettings } from './settingsManager.js';
+import { getMemoryTableData } from './information_aggregator.js';
 import { loadWorldInfo, saveWorldInfo, createWorldInfoEntry } from "/scripts/world-info.js";
 
 const { toastr, TavernHelper } = window;
+
+// 全局停止标志
+let isDiaryProcessing = false;
+let shouldStopDiary = false;
+
+/**
+ * 停止日志生成
+ */
+export function stopDiaryGeneration() {
+    shouldStopDiary = true;
+    mainLogger.warn("[角色日志] 用户请求停止日志生成");
+}
+
+/**
+ * 检查是否应该停止
+ */
+function checkShouldStop() {
+    if (shouldStopDiary) {
+        mainLogger.info("[角色日志] 检测到停止信号，终止操作");
+        return true;
+    }
+    return false;
+}
 
 /**
  * 使用AI智能识别对话中的真实角色
@@ -206,6 +230,9 @@ ${messagesText}
 function buildDiaryPrompt(characterName, recentMessages) {
     const settings = getSettings();
     
+    // 获取表格数据
+    const tableData = getMemoryTableData();
+    
     // 如果用户设置了自定义提示词，完全使用用户的提示词
     // 否则使用默认提示词
     const defaultPrompt = `分析以下对话，为角色"${characterName}"生成一条日志记录。
@@ -219,10 +246,19 @@ ${recentMessages}
 
     const customPrompt = settings.diaryPrompt || defaultPrompt;
     
-    // 替换变量
-    return customPrompt
+    // 构建最终提示词，添加格式约束
+    let finalPrompt = customPrompt
         .replace(/\$\{characterName\}/g, characterName)
-        .replace(/\$\{recentMessages\}/g, recentMessages);
+        .replace(/\$\{recentMessages\}/g, recentMessages)
+        .replace(/\$\{tableData\}/g, tableData);
+    
+    // 在提示词末尾添加格式约束（不修改用户自定义部分）
+    finalPrompt += `\n\n<format_rules>
+重要：请严格按照用户指定的格式输出，不要添加任何开场白（如"好的"、"这是"等）或其他无关内容。
+如果确实没有重要事件需要记录，只输出：无
+</format_rules>`;
+    
+    return finalPrompt;
 }
 
 /**
@@ -679,18 +715,34 @@ ${recentMessages}
  * @returns {Promise<boolean>} 是否成功
  */
 export async function addCharacterDiary(userInput, silentMode = false) {
+    // 检查是否正在处理
+    if (isDiaryProcessing) {
+        mainLogger.warn("[角色日志] 日志生成正在进行中，请勿重复触发");
+        if (!silentMode) toastr.warning("日志生成正在进行中，请稍候", "角色日志");
+        return false;
+    }
+    
     if (!userInput || userInput.trim() === '') {
         mainLogger.error("[角色日志] 输入不能为空");
         if (!silentMode) toastr.error("请输入角色名称或AI指令", "角色日志");
         return false;
     }
     
-    userInput = userInput.trim();
-    
-    // 让AI判断用户输入的是"角色名"还是"指令"
-    const settings = getSettings();
+    // 设置处理标志
+    isDiaryProcessing = true;
+    shouldStopDiary = false;
     
     try {
+        userInput = userInput.trim();
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
+        }
+        
+        // 让AI判断用户输入的是"角色名"还是"指令"
+        const settings = getSettings();
         const judgePrompt = `你是一个智能助手。请判断用户输入的是"角色名称"还是"AI指令"。
 
 用户输入：
@@ -744,6 +796,12 @@ ${userInput}
                 
                 mainLogger.info(`[角色日志] AI判断: ${result.type} - ${result.reason}`);
                 
+                // 检查停止信号
+                if (checkShouldStop()) {
+                    if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+                    return false;
+                }
+                
                 if (result.type === 'ai_instruction') {
                     mainLogger.info(`[角色日志] 切换到AI指令处理模式`);
                     return await processAIInstruction(userInput, silentMode);
@@ -760,11 +818,15 @@ ${userInput}
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
     
     try {
-        const settings = getSettings();
-        
         // 检查日志功能是否启用
         if (!settings.diaryEnabled) {
             mainLogger.info("[角色日志] 日志功能已禁用");
+            return false;
+        }
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
             return false;
         }
         
@@ -779,6 +841,12 @@ ${userInput}
         }
         
         mainLogger.info(`[角色日志] 对话收集完成，长度: ${recentMessages.length} 字符`);
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
+        }
         
         // 2. 调用AI生成日志条目
         mainLogger.info("[角色日志] 步骤 2/3: 正在调用AI生成日志...");
@@ -799,6 +867,12 @@ ${userInput}
             mainLogger.info(`[角色日志] 已将日志中的 {{user}} 替换为 ${userName}`);
             mainLogger.debug(`[角色日志] 替换前: ${originalEntry}`);
             mainLogger.debug(`[角色日志] 替换后: ${diaryEntry}`);
+        }
+        
+        // 检查停止信号
+        if (checkShouldStop()) {
+            if (!silentMode) toastr.info("日志生成已停止", "角色日志");
+            return false;
         }
         
         // 3. 根据存储模式保存日志
@@ -825,6 +899,10 @@ ${userInput}
         mainLogger.error("[角色日志] 生成过程出错", error.message);
         if (!silentMode) toastr.error(`生成日志失败: ${error.message}`, "角色日志");
         return false;
+    } finally {
+        // 重置处理标志
+        isDiaryProcessing = false;
+        shouldStopDiary = false;
     }
 }
 
