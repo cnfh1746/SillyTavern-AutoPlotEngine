@@ -90,18 +90,72 @@ ${messagesText}
             throw new Error("AI未返回内容");
         }
         
-        // 解析JSON
-        let cleanContent = content.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-        const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
-        const result = JSON.parse(jsonText);
+        mainLogger.info(`[角色识别] AI原始响应: ${content.substring(0, 200)}...`);
         
-        if (!result.characters || !Array.isArray(result.characters)) {
-            throw new Error("AI响应格式不正确");
+        // 增强的JSON解析
+        let result;
+        try {
+            // 1. 清理markdown标记
+            let cleanContent = content.trim()
+                .replace(/```json\s*/g, '')
+                .replace(/```\s*/g, '')
+                .trim();
+            
+            // 2. 提取JSON对象
+            const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error("未找到JSON对象");
+            }
+            
+            let jsonText = jsonMatch[0];
+            
+            // 3. 修复不完整的JSON
+            // 如果缺少结束的}或reason字段，尝试修复
+            if (!jsonText.trim().endsWith('}')) {
+                mainLogger.warn(`[角色识别] JSON不完整，尝试修复...`);
+                jsonText += '}';
+            }
+            
+            // 4. 尝试解析
+            result = JSON.parse(jsonText);
+            
+            // 5. 如果characters字段缺失或不是数组，修复
+            if (!result.characters || !Array.isArray(result.characters)) {
+                // 尝试从文本中提取角色名（降级方案）
+                mainLogger.warn(`[角色识别] JSON格式不正确，尝试提取角色名...`);
+                
+                // 查找 "characters": [...] 或 "characters":[ ... ]
+                const arrayMatch = jsonText.match(/"characters"\s*:\s*\[(.*?)\]/);
+                if (arrayMatch) {
+                    const arrayContent = arrayMatch[1];
+                    // 提取所有带引号的字符串
+                    const names = arrayContent.match(/"([^"]+)"/g);
+                    if (names) {
+                        result = {
+                            characters: names.map(n => n.replace(/"/g, '')),
+                            reason: "从不完整响应中提取"
+                        };
+                    } else {
+                        result = { characters: [], reason: "无法解析角色名" };
+                    }
+                } else {
+                    result = { characters: [], reason: "JSON格式错误" };
+                }
+            }
+            
+        } catch (parseError) {
+            mainLogger.error(`[角色识别] JSON解析失败: ${parseError.message}`);
+            mainLogger.error(`[角色识别] 原始内容: ${content}`);
+            return [];
+        }
+        
+        if (!Array.isArray(result.characters)) {
+            mainLogger.error(`[角色识别] characters字段不是数组`);
+            return [];
         }
         
         mainLogger.info(`[角色识别] AI识别到 ${result.characters.length} 个角色: ${result.characters.join(', ')}`);
-        mainLogger.info(`[角色识别] 识别依据: ${result.reason}`);
+        mainLogger.info(`[角色识别] 识别依据: ${result.reason || '未提供'}`);
         
         return result.characters;
         
