@@ -328,16 +328,200 @@ async function createSeparateEntry(characterName, diaryEntry) {
 }
 
 /**
- * 主函数：为指定角色生成并保存日志
- * @param {string} characterName - 角色名称
+ * AI指令模式：让AI分析并批量生成日志
+ * @param {string} instruction - 用户的指令
+ * @param {boolean} silentMode - 静默模式
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function processAIInstruction(instruction, silentMode = false) {
+    mainLogger.info(`[AI指令模式] ========== 开始处理AI指令 ==========`);
+    mainLogger.info(`[AI指令模式] 用户指令: ${instruction}`);
+    
+    try {
+        const settings = getSettings();
+        
+        // 1. 获取对话内容
+        const recentMessages = getRecentMessages(30); // 获取更多消息供AI分析
+        
+        // 2. 构建AI指令提示词
+        const aiPrompt = `你是一个智能日志管理助手。用户给了你一个指令，你需要分析对话内容，并决定为哪些角色生成日志。
+
+用户指令：
+${instruction}
+
+对话内容：
+${recentMessages}
+
+请分析对话内容，然后按以下JSON格式输出要生成日志的角色列表：
+{
+  "characters": ["角色1", "角色2", "角色3"],
+  "reason": "为什么选择这些角色的简短说明"
+}
+
+注意：
+1. 只输出JSON，不要有其他文字
+2. 如果对话中没有合适的角色或内容，输出 {"characters": [], "reason": "原因"}
+3. 角色名称必须准确匹配对话中出现的名字`;
+
+        mainLogger.info(`[AI指令模式] 正在调用AI分析指令...`);
+        
+        // 调用API
+        let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
+        if (!apiUrl.endsWith('/chat/completions')) {
+            apiUrl += '/chat/completions';
+        }
+        
+        const body = {
+            model: settings.model,
+            messages: [
+                { role: 'system', content: '你是一个智能日志管理助手，擅长分析对话并识别需要记录日志的角色。' },
+                { role: 'user', content: aiPrompt }
+            ],
+            temperature: 0.3, // 降低温度提高准确性
+            max_tokens: 1000,
+            stream: false,
+        };
+        
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        
+        if (!content) {
+            throw new Error("AI未返回任何内容");
+        }
+        
+        mainLogger.info(`[AI指令模式] AI响应: ${content}`);
+        
+        // 3. 解析JSON
+        let result;
+        try {
+            // 尝试提取JSON（可能被markdown包裹）
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                result = JSON.parse(jsonMatch[0]);
+            } else {
+                result = JSON.parse(content);
+            }
+        } catch (e) {
+            throw new Error(`无法解析AI响应为JSON: ${e.message}`);
+        }
+        
+        if (!result.characters || !Array.isArray(result.characters)) {
+            throw new Error("AI响应格式不正确");
+        }
+        
+        mainLogger.info(`[AI指令模式] AI识别到 ${result.characters.length} 个角色: ${result.characters.join(', ')}`);
+        mainLogger.info(`[AI指令模式] 原因: ${result.reason}`);
+        
+        if (result.characters.length === 0) {
+            mainLogger.info(`[AI指令模式] 没有需要生成日志的角色`);
+            if (!silentMode) {
+                toastr.info(`AI分析结果：${result.reason}`, "AI指令模式", { timeOut: 5000 });
+            }
+            return false;
+        }
+        
+        // 4. 批量生成日志
+        if (!silentMode) {
+            toastr.info(`AI识别到 ${result.characters.length} 个角色，开始生成日志...`, "AI指令模式", { timeOut: 3000 });
+        }
+        
+        const batchResults = {
+            total: result.characters.length,
+            success: 0,
+            failed: 0,
+            skipped: 0
+        };
+        
+        for (const characterName of result.characters) {
+            try {
+                mainLogger.info(`[AI指令模式] [${batchResults.success + batchResults.failed + batchResults.skipped + 1}/${batchResults.total}] 处理角色: ${characterName}`);
+                
+                const success = await addCharacterDiary(characterName, true);
+                
+                if (success) {
+                    batchResults.success++;
+                    mainLogger.success(`[AI指令模式] ✓ ${characterName} - 成功`);
+                } else {
+                    batchResults.skipped++;
+                    mainLogger.info(`[AI指令模式] ○ ${characterName} - 跳过`);
+                }
+                
+                // 延迟避免API请求过快
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                batchResults.failed++;
+                mainLogger.error(`[AI指令模式] ✗ ${characterName} - 失败: ${error.message}`);
+            }
+        }
+        
+        // 5. 输出结果
+        mainLogger.success(`[AI指令模式] ========== 批量生成完成 ==========`);
+        mainLogger.info(`[AI指令模式] 总计: ${batchResults.total} | 成功: ${batchResults.success} | 跳过: ${batchResults.skipped} | 失败: ${batchResults.failed}`);
+        
+        if (!silentMode) {
+            toastr.success(
+                `AI指令执行完成！\n成功: ${batchResults.success} | 跳过: ${batchResults.skipped} | 失败: ${batchResults.failed}`,
+                "AI指令模式",
+                { timeOut: 5000 }
+            );
+        }
+        
+        return batchResults.success > 0;
+        
+    } catch (error) {
+        mainLogger.error("[AI指令模式] 处理失败", error.message);
+        if (!silentMode) {
+            toastr.error(`AI指令处理失败: ${error.message}`, "AI指令模式");
+        }
+        return false;
+    }
+}
+
+/**
+ * 主函数：为指定角色生成并保存日志（支持AI指令模式）
+ * @param {string} characterName - 角色名称或AI指令
  * @param {boolean} silentMode - 静默模式（不显示toastr通知）
  * @returns {Promise<boolean>} 是否成功
  */
 export async function addCharacterDiary(characterName, silentMode = false) {
     if (!characterName || characterName.trim() === '') {
         mainLogger.error("[角色日志] 角色名称不能为空");
-        if (!silentMode) toastr.error("请输入角色名称", "角色日志");
+        if (!silentMode) toastr.error("请输入角色名称或AI指令", "角色日志");
         return false;
+    }
+    
+    characterName = characterName.trim();
+    
+    // 检测是否为AI指令模式
+    // 判断标准：包含"请"、"分析"、"表格"、"所有"、"批量"等关键词，或长度超过20字符
+    const isAIInstruction = (
+        characterName.length > 20 ||
+        characterName.includes('请') ||
+        characterName.includes('分析') ||
+        characterName.includes('表格') ||
+        characterName.includes('所有角色') ||
+        characterName.includes('批量') ||
+        characterName.includes('生成日志') ||
+        characterName.includes('读取')
+    );
+    
+    if (isAIInstruction) {
+        mainLogger.info(`[角色日志] 检测到AI指令模式，切换到AI指令处理...`);
+        return await processAIInstruction(characterName, silentMode);
     }
     
     characterName = characterName.trim();
