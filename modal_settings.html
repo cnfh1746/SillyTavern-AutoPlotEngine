@@ -214,6 +214,12 @@
                         </label>
                         <small class="notes">启用后将自动识别对话中的所有角色并为每个角色生成日志（忽略目标角色设置）。</small>
                     </div>
+                    
+                    <div class="ape_settings_block">
+                        <label for="ape_diary_message_count">分析消息数量</label>
+                        <input id="ape_diary_message_count" type="number" class="text_pole" min="1" max="50" step="1" value="1" />
+                        <small class="notes">只分析最近 N 条<strong>AI消息</strong>（不含用户消息）。设置为1表示只分析最新的AI回复，避免识别到不在场的角色。</small>
+                    </div>
                 </fieldset>
                 
                 <fieldset class="settings-group">

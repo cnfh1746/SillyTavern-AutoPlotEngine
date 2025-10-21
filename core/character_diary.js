@@ -11,10 +11,9 @@ const { toastr, TavernHelper } = window;
 
 /**
  * 使用AI智能识别对话中的真实角色
- * @param {number} messageCount - 分析最近几条消息
  * @returns {Promise<Array<string>>} 角色名称数组
  */
-async function detectCharactersFromMessages(messageCount = 20) {
+async function detectCharactersFromMessages() {
     const context = window.SillyTavern.getContext();
     const settings = getSettings();
     
@@ -23,14 +22,26 @@ async function detectCharactersFromMessages(messageCount = 20) {
         return [];
     }
     
-    // 收集最近的消息
-    const recentMessages = context.chat.slice(-messageCount);
-    let messagesText = '';
+    // 使用设置中的消息数量（默认为1，即只读最新的AI消息）
+    const messageCount = settings.diaryMessageCount || 1;
+    mainLogger.info(`[角色识别] 分析最近 ${messageCount} 条AI消息`);
     
-    recentMessages.forEach(msg => {
-        const speaker = msg.is_user ? '{{user}}' : (msg.name || 'AI');
+    // 只收集AI消息（不包括用户消息）
+    const aiMessages = context.chat.filter(msg => !msg.is_user);
+    const recentAIMessages = aiMessages.slice(-messageCount);
+    
+    if (recentAIMessages.length === 0) {
+        mainLogger.info(`[角色识别] 没有AI消息`);
+        return [];
+    }
+    
+    let messagesText = '';
+    recentAIMessages.forEach(msg => {
+        const speaker = msg.name || 'AI';
         messagesText += `${speaker}: ${msg.mes}\n`;
     });
+    
+    mainLogger.info(`[角色识别] 收集到 ${recentAIMessages.length} 条AI消息，总长度: ${messagesText.length} 字符`);
     
     // 完全让AI自己识别，不做任何预处理
     const aiPrompt = `请分析以下对话，识别出所有需要记录日志的角色。
