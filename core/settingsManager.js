@@ -181,26 +181,29 @@ function validateSettings(settings) {
 }
 
 /**
- * Saves the current settings to extension settings.
+ * 获取当前设置
+ * @returns {object} 当前设置对象
  */
-export function saveSettings() {
-    // 验证设置
-    currentSettings = validateSettings(currentSettings);
-    
-    extensionSettings[extensionName] = currentSettings;
-    saveSettingsDebounced();
-    mainLogger.info("设置已保存");
+export function getSettings() {
+    if (!extension_settings[extensionName]) {
+        extension_settings[extensionName] = { ...defaultSettings };
+    }
+    return { ...defaultSettings, ...extension_settings[extensionName] };
 }
 
 /**
- * Saves the provided settings object.
- * @param {object} settings - The settings object to save.
+ * 保存设置
+ * @param {object} settings - 要保存的设置对象
  */
 export function saveSettings(settings) {
     if (!extension_settings[extensionName]) {
         extension_settings[extensionName] = {};
     }
-    Object.assign(extension_settings[extensionName], settings);
+    
+    // 验证设置
+    const validated = validateSettings(settings);
+    
+    Object.assign(extension_settings[extensionName], validated);
     saveSettingsDebounced();
     console.log(`[${extensionName}] Settings saved.`);
 }
