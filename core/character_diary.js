@@ -675,6 +675,13 @@ ${recentMessages}
         };
         
         for (const characterName of result.characters) {
+            // 在每个角色处理前检查停止信号
+            if (checkShouldStop()) {
+                mainLogger.warn(`[AI指令模式] 检测到停止信号，中断批量处理`);
+                if (!silentMode) toastr.info("批量生成已停止", "AI指令模式");
+                break; // 跳出循环
+            }
+            
             try {
                 mainLogger.info(`[AI指令模式] [${batchResults.success + batchResults.failed + batchResults.skipped + 1}/${batchResults.total}] 处理角色: ${characterName}`);
                 
@@ -689,12 +696,25 @@ ${recentMessages}
                     mainLogger.info(`[AI指令模式] ○ ${characterName} - 跳过`);
                 }
                 
-                // 延迟避免API请求过快
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // 延迟避免API请求过快，并在延迟期间检查停止信号
+                for (let i = 0; i < 10; i++) {
+                    if (checkShouldStop()) {
+                        mainLogger.warn(`[AI指令模式] 延迟期间检测到停止信号`);
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100)); // 分成10个100ms
+                }
                 
             } catch (error) {
                 batchResults.failed++;
                 mainLogger.error(`[AI指令模式] ✗ ${characterName} - 失败: ${error.message}`);
+                
+                // 如果是429错误（速率限制），自动停止避免继续浪费请求
+                if (error.message.includes('429')) {
+                    mainLogger.error(`[AI指令模式] 遇到速率限制(429)，自动停止批量处理`);
+                    if (!silentMode) toastr.error("API速率限制，已自动停止", "AI指令模式");
+                    break;
+                }
             }
         }
         
