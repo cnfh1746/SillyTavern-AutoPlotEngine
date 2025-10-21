@@ -10,32 +10,105 @@ import { loadWorldInfo, saveWorldInfo, createWorldInfoEntry } from "/scripts/wor
 const { toastr, TavernHelper } = window;
 
 /**
- * 从最近的对话中智能识别所有角色
+ * 使用AI智能识别对话中的真实角色
  * @param {number} messageCount - 分析最近几条消息
- * @returns {Array<string>} 角色名称数组
+ * @returns {Promise<Array<string>>} 角色名称数组
  */
-function detectCharactersFromMessages(messageCount = 20) {
+async function detectCharactersFromMessages(messageCount = 20) {
     const context = window.SillyTavern.getContext();
-    const characterNames = new Set();
+    const settings = getSettings();
     
-    if (context.chat && context.chat.length > 0) {
-        const recentMessages = context.chat.slice(-messageCount);
-        
-        recentMessages.forEach(msg => {
-            // 排除用户消息，只统计AI角色
-            if (!msg.is_user && msg.name) {
-                // 过滤掉系统消息和特殊标记
-                const name = msg.name.trim();
-                if (name && name !== 'System' && name !== '系统' && !name.startsWith('[')) {
-                    characterNames.add(name);
-                }
-            }
-        });
+    if (!context.chat || context.chat.length === 0) {
+        mainLogger.info(`[角色识别] 没有对话记录`);
+        return [];
     }
     
-    const result = Array.from(characterNames);
-    mainLogger.info(`[角色识别] 在最近${messageCount}条消息中检测到 ${result.length} 个角色: ${result.join(', ')}`);
-    return result;
+    // 收集最近的消息
+    const recentMessages = context.chat.slice(-messageCount);
+    let messagesText = '';
+    
+    recentMessages.forEach(msg => {
+        const speaker = msg.is_user ? '{{user}}' : (msg.name || 'AI');
+        messagesText += `${speaker}: ${msg.mes}\n`;
+    });
+    
+    // 完全让AI自己识别，不做任何预处理
+    const aiPrompt = `请分析以下对话，识别出所有需要记录日志的角色。
+
+对话内容：
+${messagesText}
+
+识别规则：
+1. 识别对话中出现的真实角色名（如：炽霞、长离、秧秧等有独立人格的角色）
+2. 排除以下内容：
+   - {{user}}（这是用户角色，不需要记录）
+   - 世界名、游戏名（如：鸣潮、原神、崩坏）
+   - 系统名称、组织名、地点名
+   - 其他非人物的名词
+
+请按以下JSON格式输出：
+{
+  "characters": ["角色1", "角色2"],
+  "reason": "识别依据的简短说明"
+}
+
+只输出JSON，不要有其他文字。`;
+
+    try {
+        let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
+        if (!apiUrl.endsWith('/chat/completions')) {
+            apiUrl += '/chat/completions';
+        }
+        
+        const body = {
+            model: settings.model,
+            messages: [
+                { role: 'user', content: aiPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 1000,
+            stream: false,
+        };
+        
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        
+        if (!content) {
+            throw new Error("AI未返回内容");
+        }
+        
+        // 解析JSON
+        let cleanContent = content.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+        const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
+        const result = JSON.parse(jsonText);
+        
+        if (!result.characters || !Array.isArray(result.characters)) {
+            throw new Error("AI响应格式不正确");
+        }
+        
+        mainLogger.info(`[角色识别] AI识别到 ${result.characters.length} 个角色: ${result.characters.join(', ')}`);
+        mainLogger.info(`[角色识别] 识别依据: ${result.reason}`);
+        
+        return result.characters;
+        
+    } catch (error) {
+        mainLogger.error(`[角色识别] AI识别失败: ${error.message}`);
+        return [];
+    }
 }
 
 /**
@@ -519,34 +592,84 @@ ${recentMessages}
  * @param {boolean} silentMode - 静默模式（不显示toastr通知）
  * @returns {Promise<boolean>} 是否成功
  */
-export async function addCharacterDiary(characterName, silentMode = false) {
-    if (!characterName || characterName.trim() === '') {
-        mainLogger.error("[角色日志] 角色名称不能为空");
+export async function addCharacterDiary(userInput, silentMode = false) {
+    if (!userInput || userInput.trim() === '') {
+        mainLogger.error("[角色日志] 输入不能为空");
         if (!silentMode) toastr.error("请输入角色名称或AI指令", "角色日志");
         return false;
     }
     
-    characterName = characterName.trim();
+    userInput = userInput.trim();
     
-    // 检测是否为AI指令模式
-    // 判断标准：包含"请"、"分析"、"表格"、"所有"、"批量"等关键词，或长度超过20字符
-    const isAIInstruction = (
-        characterName.length > 20 ||
-        characterName.includes('请') ||
-        characterName.includes('分析') ||
-        characterName.includes('表格') ||
-        characterName.includes('所有角色') ||
-        characterName.includes('批量') ||
-        characterName.includes('生成日志') ||
-        characterName.includes('读取')
-    );
+    // 让AI判断用户输入的是"角色名"还是"指令"
+    const settings = getSettings();
     
-    if (isAIInstruction) {
-        mainLogger.info(`[角色日志] 检测到AI指令模式，切换到AI指令处理...`);
-        return await processAIInstruction(characterName, silentMode);
+    try {
+        const judgePrompt = `你是一个智能助手。请判断用户输入的是"角色名称"还是"AI指令"。
+
+用户输入：
+${userInput}
+
+判断规则：
+- 如果是简短的名字（如：炽霞、长离、秧秧），判断为"角色名称"
+- 如果是完整的句子或请求（如：请分析对话、为所有角色生成日志），判断为"AI指令"
+
+请按以下JSON格式输出：
+{
+  "type": "character_name" 或 "ai_instruction",
+  "reason": "判断理由"
+}
+
+只输出JSON，不要有其他文字。`;
+
+        let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
+        if (!apiUrl.endsWith('/chat/completions')) {
+            apiUrl += '/chat/completions';
+        }
+        
+        const body = {
+            model: settings.model,
+            messages: [
+                { role: 'user', content: judgePrompt }
+            ],
+            temperature: 0.1,
+            max_tokens: 200,
+            stream: false,
+        };
+        
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${settings.apiKey}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            const content = data.choices?.[0]?.message?.content?.trim();
+            
+            if (content) {
+                let cleanContent = content.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+                const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
+                const result = JSON.parse(jsonText);
+                
+                mainLogger.info(`[角色日志] AI判断: ${result.type} - ${result.reason}`);
+                
+                if (result.type === 'ai_instruction') {
+                    mainLogger.info(`[角色日志] 切换到AI指令处理模式`);
+                    return await processAIInstruction(userInput, silentMode);
+                }
+            }
+        }
+    } catch (error) {
+        mainLogger.warn(`[角色日志] AI判断失败，按角色名称处理: ${error.message}`);
     }
     
-    characterName = characterName.trim();
+    // 默认按角色名称处理
+    const characterName = userInput;
     mainLogger.info(`[角色日志] ========== 开始生成角色日志 ==========`);
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
     
@@ -623,8 +746,8 @@ export async function addMultipleCharacterDiaries() {
     
     mainLogger.info("[批量日志] ========== 开始智能多角色日志生成 ==========");
     
-    // 1. 检测所有角色
-    const characters = detectCharactersFromMessages(20);
+    // 1. 检测所有角色（现在是异步的）
+    const characters = await detectCharactersFromMessages(20);
     
     if (characters.length === 0) {
         mainLogger.info("[批量日志] 未检测到任何角色");
