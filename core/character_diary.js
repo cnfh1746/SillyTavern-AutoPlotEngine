@@ -101,47 +101,35 @@ ${messagesText}
                 .replace(/```\s*/g, '')
                 .trim();
             
-            // 2. 提取JSON对象
-            const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-                throw new Error("未找到JSON对象");
+            mainLogger.info(`[角色识别] 清理后内容: ${cleanContent.substring(0, 300)}...`);
+            
+            // 2. 即使JSON不完整，也尝试提取characters数组
+            // 匹配 "characters": ["散华", "杨", "今汐", ...
+            const arrayMatch = cleanContent.match(/"characters"\s*:\s*\[([^\]]*)/);
+            
+            if (!arrayMatch) {
+                throw new Error("未找到characters数组");
             }
             
-            let jsonText = jsonMatch[0];
+            let arrayContent = arrayMatch[1];
+            mainLogger.info(`[角色识别] 提取到数组内容: ${arrayContent}`);
             
-            // 3. 修复不完整的JSON
-            // 如果缺少结束的}或reason字段，尝试修复
-            if (!jsonText.trim().endsWith('}')) {
-                mainLogger.warn(`[角色识别] JSON不完整，尝试修复...`);
-                jsonText += '}';
+            // 3. 提取所有带引号的角色名
+            const nameMatches = arrayContent.match(/"([^"]+)"/g);
+            
+            if (!nameMatches || nameMatches.length === 0) {
+                throw new Error("未找到任何角色名");
             }
             
-            // 4. 尝试解析
-            result = JSON.parse(jsonText);
+            // 4. 清理引号
+            const characters = nameMatches.map(n => n.replace(/"/g, '').trim());
             
-            // 5. 如果characters字段缺失或不是数组，修复
-            if (!result.characters || !Array.isArray(result.characters)) {
-                // 尝试从文本中提取角色名（降级方案）
-                mainLogger.warn(`[角色识别] JSON格式不正确，尝试提取角色名...`);
-                
-                // 查找 "characters": [...] 或 "characters":[ ... ]
-                const arrayMatch = jsonText.match(/"characters"\s*:\s*\[(.*?)\]/);
-                if (arrayMatch) {
-                    const arrayContent = arrayMatch[1];
-                    // 提取所有带引号的字符串
-                    const names = arrayContent.match(/"([^"]+)"/g);
-                    if (names) {
-                        result = {
-                            characters: names.map(n => n.replace(/"/g, '')),
-                            reason: "从不完整响应中提取"
-                        };
-                    } else {
-                        result = { characters: [], reason: "无法解析角色名" };
-                    }
-                } else {
-                    result = { characters: [], reason: "JSON格式错误" };
-                }
-            }
+            mainLogger.info(`[角色识别] 成功提取 ${characters.length} 个角色名`);
+            
+            result = {
+                characters: characters,
+                reason: "从AI响应中提取"
+            };
             
         } catch (parseError) {
             mainLogger.error(`[角色识别] JSON解析失败: ${parseError.message}`);
