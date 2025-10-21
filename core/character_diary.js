@@ -99,7 +99,7 @@ ${messagesText}
                 { role: 'user', content: aiPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 1000,
+            max_tokens: 20000,
             stream: false,
         };
         
@@ -533,7 +533,7 @@ ${recentMessages}
                 { role: 'user', content: aiPrompt }
             ],
             temperature: 0.3, // 降低温度提高准确性
-            max_tokens: 2000, // 增加token限制
+            max_tokens: 20000,
             stream: false,
         };
         
@@ -719,7 +719,7 @@ ${userInput}
                 { role: 'user', content: judgePrompt }
             ],
             temperature: 0.1,
-            max_tokens: 200,
+            max_tokens: 20000,
             stream: false,
         };
         

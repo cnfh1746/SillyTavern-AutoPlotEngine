@@ -95,7 +95,7 @@ ${entriesText}
                 { role: 'user', content: aiPrompt }
             ],
             temperature: 0.2,
-            max_tokens: 2000,
+            max_tokens: 20000,
             stream: false,
         };
         
@@ -123,18 +123,60 @@ ${entriesText}
         
         mainLogger.info(`[世界书管理] AI响应: ${content}`);
         
-        // 4. 解析JSON
+        // 4. 解析JSON - 增强容错性
         let result;
         try {
+            // 清理markdown代码块标记
             let cleanContent = content.trim()
                 .replace(/```json\s*/g, '')
                 .replace(/```\s*/g, '')
                 .trim();
             
+            // 提取JSON对象（支持多行）
             const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-            const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
+            let jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
             
-            result = JSON.parse(jsonText);
+            // 尝试修复常见的JSON格式问题
+            // 1. 修复未闭合的字符串（常见于被截断的响应）
+            if (jsonText.includes('"') && !jsonText.endsWith('}')) {
+                mainLogger.warn(`[世界书管理] 检测到JSON可能不完整，尝试修复...`);
+                
+                // 查找最后一个完整的字段
+                const lastCompleteField = jsonText.lastIndexOf('",');
+                if (lastCompleteField > 0) {
+                    jsonText = jsonText.substring(0, lastCompleteField + 1) + '\n}';
+                    mainLogger.info(`[世界书管理] JSON已修复`);
+                }
+            }
+            
+            // 2. 尝试解析
+            try {
+                result = JSON.parse(jsonText);
+            } catch (parseError) {
+                // 如果还是失败，尝试提取uids数组
+                mainLogger.warn(`[世界书管理] 标准JSON解析失败，尝试提取关键信息...`);
+                
+                const uidsMatch = jsonText.match(/"uids"\s*:\s*\[([^\]]*)\]/);
+                const reasonMatch = jsonText.match(/"reason"\s*:\s*"([^"]*)"/);
+                
+                if (uidsMatch) {
+                    const uids = uidsMatch[1]
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(s => s)
+                        .map(s => parseInt(s));
+                    
+                    result = {
+                        uids: uids,
+                        reason: reasonMatch ? reasonMatch[1] : "部分解析",
+                        confirm_message: `已识别 ${uids.length} 个条目待删除`
+                    };
+                    
+                    mainLogger.success(`[世界书管理] 成功提取关键信息`);
+                } else {
+                    throw parseError;
+                }
+            }
             
         } catch (e) {
             mainLogger.error(`[世界书管理] JSON解析失败: ${e.message}`);
