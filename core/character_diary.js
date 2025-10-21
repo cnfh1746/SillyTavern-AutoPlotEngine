@@ -871,81 +871,26 @@ export async function addCharacterDiary(userInput, silentMode = false) {
             return false;
         }
         
-        // 让AI判断用户输入的是"角色名"还是"指令"
-        const settings = getSettings();
-        const judgePrompt = `你是一个智能助手。请判断用户输入的是"角色名称"还是"AI指令"。
-
-用户输入：
-${userInput}
-
-判断规则：
-- 如果是简短的名字（如：炽霞、长离、秧秧），判断为"角色名称"
-- 如果是完整的句子或请求（如：请分析对话、为所有角色生成日志），判断为"AI指令"
-
-请按以下JSON格式输出：
-{
-  "type": "character_name" 或 "ai_instruction",
-  "reason": "判断理由"
-}
-
-只输出JSON，不要有其他文字。`;
-
-        let apiUrl = settings.apiUrl.trim().replace(/\/$/, '');
-        if (!apiUrl.endsWith('/chat/completions')) {
-            apiUrl += '/chat/completions';
+        // 简单规则判断：包含"请"、"所有"、"表格"等关键词视为AI指令
+        const instructionKeywords = ['请', '所有', '表格', '批量', '全部', '分析', '读取', '女性', '男性', '角色'];
+        const isInstruction = instructionKeywords.some(keyword => userInput.includes(keyword)) && userInput.length > 10;
+        
+        if (isInstruction) {
+            mainLogger.info(`[角色日志] 检测到AI指令关键词，切换到AI指令处理模式`);
+            return await processAIInstruction(userInput, silentMode);
         }
         
-        const body = {
-            model: settings.model,
-            messages: [
-                { role: 'user', content: judgePrompt }
-            ],
-            temperature: 0.1,
-            max_tokens: 20000,
-            stream: false,
-        };
-        
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const content = data.choices?.[0]?.message?.content?.trim();
-            
-            if (content) {
-                let cleanContent = content.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-                const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-                const jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
-                const result = JSON.parse(jsonText);
-                
-                mainLogger.info(`[角色日志] AI判断: ${result.type} - ${result.reason}`);
-                
-                // 检查停止信号
-                if (checkShouldStop()) {
-                    if (!silentMode) toastr.info("日志生成已停止", "角色日志");
-                    return false;
-                }
-                
-                if (result.type === 'ai_instruction') {
-                    mainLogger.info(`[角色日志] 切换到AI指令处理模式`);
-                    return await processAIInstruction(userInput, silentMode);
-                }
-            }
-        }
+        mainLogger.info(`[角色日志] 按单个角色名称处理: ${userInput}`);
     } catch (error) {
-        mainLogger.warn(`[角色日志] AI判断失败，按角色名称处理: ${error.message}`);
+        mainLogger.warn(`[角色日志] 判断失败，按角色名称处理: ${error.message}`);
     }
     
     // 默认按角色名称处理
     const characterName = userInput;
     mainLogger.info(`[角色日志] ========== 开始生成角色日志 ==========`);
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
+    
+    const settings = getSettings(); // 添加这一行！
     
     try {
         // 检查日志功能是否启用
