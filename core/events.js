@@ -15,6 +15,10 @@ const extensionName = 'SillyTavern-AutoPlotEngine';
 let plotMessageCount = 0;
 let diaryMessageCount = 0;
 
+// 防止重入的标志
+let isProcessingPlot = false;
+let isProcessingDiary = false;
+
 /**
  * 在收到新消息时触发
  * @param {object} data - 事件数据
@@ -43,28 +47,45 @@ export async function onMessageReceived(data) {
 
     // === 剧情大纲自动触发 ===
     if (settings.enabled && settings.runMode === 'auto') {
+        // 防止重入
+        if (isProcessingPlot) {
+            mainLogger.debug('[主引擎] 剧情生成正在进行中，跳过本次触发');
+            return;
+        }
+        
         plotMessageCount++;
         mainLogger.info(`[主引擎] 剧情消息计数: ${plotMessageCount}/${settings.triggerThreshold}`);
 
         if (plotMessageCount >= settings.triggerThreshold) {
             mainLogger.info('[主引擎] 达到剧情生成阈值，自动触发...');
+            isProcessingPlot = true;
+            
             try {
                 await runPlotGenerationCycle();
                 plotMessageCount = 0; // 重置计数器
                 mainLogger.success('[主引擎] 自动剧情生成完成，计数器已重置');
             } catch (error) {
                 mainLogger.error('[主引擎] 自动剧情生成失败', error.message);
+            } finally {
+                isProcessingPlot = false;
             }
         }
     }
 
     // === 角色日志自动触发 ===
     if (settings.diaryEnabled && settings.diaryRunMode === 'auto') {
+        // 防止重入
+        if (isProcessingDiary) {
+            mainLogger.debug('[主引擎] 日志生成正在进行中，跳过本次触发');
+            return;
+        }
+        
         diaryMessageCount++;
         mainLogger.info(`[主引擎] 日志消息计数: ${diaryMessageCount}/${settings.diaryTriggerThreshold}`);
 
         if (diaryMessageCount >= settings.diaryTriggerThreshold) {
             mainLogger.info('[主引擎] 达到日志生成阈值，自动触发...');
+            isProcessingDiary = true;
             
             try {
                 // 检查是否启用智能多角色识别
@@ -94,6 +115,8 @@ export async function onMessageReceived(data) {
             } catch (error) {
                 mainLogger.error('[主引擎] 自动日志生成失败', error.message);
                 diaryMessageCount = 0; // 重置计数器避免一直卡住
+            } finally {
+                isProcessingDiary = false;
             }
         }
     }
@@ -106,7 +129,10 @@ export function onChatChanged() {
     // 重置计数器（切换聊天时）
     plotMessageCount = 0;
     diaryMessageCount = 0;
-    mainLogger.info('[主引擎] 聊天已切换，消息计数器已重置');
+    // 重置处理标志
+    isProcessingPlot = false;
+    isProcessingDiary = false;
+    mainLogger.info('[主引擎] 聊天已切换，消息计数器和处理标志已重置');
 }
 
 /**
@@ -124,6 +150,19 @@ export function resetCounters() {
 export function getCounterStatus() {
     return {
         plot: plotMessageCount,
-        diary: diaryMessageCount
+        diary: diaryMessageCount,
+        isProcessingPlot: isProcessingPlot,
+        isProcessingDiary: isProcessingDiary
     };
+}
+
+/**
+ * 清理资源（扩展卸载时调用）
+ */
+export function cleanup() {
+    plotMessageCount = 0;
+    diaryMessageCount = 0;
+    isProcessingPlot = false;
+    isProcessingDiary = false;
+    mainLogger.info('[主引擎] 已清理所有资源');
 }

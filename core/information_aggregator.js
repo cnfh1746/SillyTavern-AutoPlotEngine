@@ -10,6 +10,7 @@
 import { getContext } from '/scripts/extensions.js';
 import { characters } from '/script.js';
 import { loadWorldInfo, world_names } from '/scripts/world-info.js';
+import { mainLogger } from './logger.js';
 
 /**
  * Gets the recent chat history.
@@ -19,19 +20,27 @@ import { loadWorldInfo, world_names } from '/scripts/world-info.js';
 async function getChatHistory(limit = 20) {
     try {
         const context = getContext();
+        
+        if (!context) {
+            mainLogger.warn('[信息聚合] 无法获取上下文对象');
+            return "无聊天上下文可用。";
+        }
+        
         const chat = context.chat;
         if (!chat || chat.length === 0) {
-            return "No chat history available.";
+            mainLogger.info('[信息聚合] 当前无聊天历史');
+            return "暂无聊天历史。";
         }
 
         const recentChat = chat.slice(-limit);
         return recentChat.map(msg => {
-            const author = msg.is_user ? (context.name1 || 'User') : (msg.name || 'Character');
+            const author = msg.is_user ? (context.name1 || '用户') : (msg.name || '角色');
             return `${author}: ${msg.mes || msg.message || ''}`;
         }).join('\n');
+        
     } catch (error) {
-        console.error("[AutoPlotEngine] Error getting chat history:", error);
-        return "Error retrieving chat history.";
+        mainLogger.error('[信息聚合] 获取聊天历史失败', error.message);
+        return "获取聊天历史时出错。";
     }
 }
 
@@ -52,7 +61,8 @@ async function getActiveLorebooks() {
     try {
         const context = getContext();
         if (!context || !context.characterId) {
-            return "No character selected.\n";
+            mainLogger.info('[信息聚合] 未选择角色');
+            return "未选择角色。\n";
         }
 
         let allEntriesContent = "### Active Lorebooks\n\n";
@@ -78,7 +88,8 @@ async function getActiveLorebooks() {
         }
 
         if (bookNames.length === 0) {
-            return "No lorebooks linked to current character.\n";
+            mainLogger.info('[信息聚合] 当前角色未链接世界书');
+            return "当前角色未链接世界书。\n";
         }
 
         // Read entries from each book
@@ -124,14 +135,14 @@ async function getActiveLorebooks() {
                     }
                 }
             } catch (error) {
-                console.error(`[AutoPlotEngine] Error reading lorebook ${bookName}:`, error);
+                mainLogger.error(`[信息聚合] 读取世界书失败 ${bookName}`, error.message);
             }
         }
         
         return allEntriesContent;
     } catch (error) {
-        console.error("[AutoPlotEngine] Error getting active lorebooks:", error);
-        return "Error retrieving lorebook information.";
+        mainLogger.error("[信息聚合] 获取活跃世界书失败", error.message);
+        return "获取世界书信息时出错。";
     }
 }
 
@@ -145,22 +156,22 @@ async function getCharacterCards() {
         const mainCharId = context.characterId;
         const mainChar = context.characters[mainCharId];
         
-        let charInfo = "### Main Characters\n\n";
+        let charInfo = "### 主要角色\n\n";
 
         if (mainChar) {
             charInfo += `#### ${mainChar.name}\n`;
-            charInfo += `Description: ${mainChar.description}\n`;
-            charInfo += `Personality: ${mainChar.personality}\n`;
-            charInfo += `First Message: ${mainChar.first_mes}\n\n`;
+            charInfo += `描述: ${mainChar.description}\n`;
+            charInfo += `性格: ${mainChar.personality}\n`;
+            charInfo += `首条消息: ${mainChar.first_mes}\n\n`;
         }
 
-        // You could potentially add logic here to get other characters as well
-        // For now, we focus on the primary character.
+        // 可以在这里添加获取其他角色的逻辑
+        // 目前专注于主要角色
 
         return charInfo;
     } catch (error) {
-        console.error("Error getting character cards:", error);
-        return "Error retrieving character information.";
+        mainLogger.error("[信息聚合] 获取角色卡失败", error.message);
+        return "获取角色信息时出错。";
     }
 }
 
@@ -170,7 +181,7 @@ async function getCharacterCards() {
  * It looks for chat messages that might contain rendered table data.
  * @returns {Promise<string>} A promise that resolves to a string containing table data.
  */
-async function getTables() {
+async function getTables(messageLimit = 50) {
     try {
         const context = getContext();
         const chat = context.chat;
@@ -178,35 +189,42 @@ async function getTables() {
             return "";
         }
 
-        let tableContent = "### Tables Data\n\n";
+        let tableContent = "### 表格数据\n\n";
         let foundTables = false;
 
-        // Tables are often injected as complex HTML. We'll look for markers.
-        // This is a heuristic approach.
+        // 只处理最近的N条消息以提高性能
+        const recentMessages = chat.slice(-messageLimit);
         const tableMarkers = ['<div class="amily2-table-wrapper">', 'class="grid-table"'];
 
-        for (const msg of chat) {
-            if (tableMarkers.some(marker => msg.message.includes(marker))) {
-                // We won't dump the raw HTML, but will indicate its presence.
-                // A more sophisticated parser could be built if needed.
-                tableContent += `Found table data in a message by ${msg.name}.\n`;
-                // For now, we just extract the text content to avoid sending huge HTML blocks.
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = msg.message;
-                tableContent += (tempDiv.textContent || tempDiv.innerText || "");
+        for (const msg of recentMessages) {
+            // 先用字符串检查，避免不必要的DOM操作
+            const hasTable = tableMarkers.some(marker => 
+                msg.message && msg.message.includes(marker)
+            );
+            
+            if (hasTable) {
+                tableContent += `在${msg.name}的消息中发现表格数据。\n`;
+                
+                // 使用DOMParser代替createElement，更安全
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(msg.message, 'text/html');
+                const textContent = doc.body.textContent || doc.body.innerText || "";
+                
+                // 限制内容长度
+                tableContent += textContent.substring(0, 1000);
                 tableContent += "\n\n";
                 foundTables = true;
             }
         }
 
         if (!foundTables) {
-            return "No table data found in recent chat.\n\n";
+            return "近期聊天中未发现表格数据。\n\n";
         }
 
         return tableContent;
     } catch (error) {
-        console.error("Error getting tables data:", error);
-        return "Error retrieving tables information.\n\n";
+        mainLogger.error("[信息聚合] 获取表格数据失败", error.message);
+        return "获取表格信息时出错。\n\n";
     }
 }
 
@@ -215,19 +233,20 @@ async function getTables() {
  * @returns {Promise<string>} A promise that resolves to the complete world state as a string.
  */
 export async function getAllContext() {
-    let fullContext = "### Current World State Analysis\n\n";
+    let fullContext = "### 当前世界状态分析\n\n";
 
-    const charCards = await getCharacterCards();
+    // 并行获取所有信息以提高性能
+    const [charCards, lorebooks, tables, chatHistory] = await Promise.all([
+        getCharacterCards(),
+        getActiveLorebooks(),
+        getTables(),
+        getChatHistory()
+    ]);
+
     fullContext += charCards;
-
-    const lorebooks = await getActiveLorebooks();
     fullContext += lorebooks;
-
-    const tables = await getTables();
     fullContext += tables;
-
-    const chatHistory = await getChatHistory();
-    fullContext += "### Recent Conversation\n\n" + chatHistory;
+    fullContext += "### 近期对话\n\n" + chatHistory;
 
     return fullContext;
 }

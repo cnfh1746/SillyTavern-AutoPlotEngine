@@ -76,12 +76,120 @@ const defaultSettings = {
 };
 
 /**
- * Gets the current settings, merged with defaults.
- * @returns {object} The complete settings object.
+ * 验证数字输入
+ * @param {*} value - 要验证的值
+ * @param {number} min - 最小值
+ * @param {number} max - 最大值
+ * @param {number} defaultValue - 默认值
+ * @returns {number} 验证后的数字
  */
-export function getSettings() {
-    const savedSettings = extension_settings[extensionName] || {};
-    return { ...defaultSettings, ...savedSettings };
+function validateNumber(value, min, max, defaultValue) {
+    const num = parseFloat(value);
+    
+    if (isNaN(num)) {
+        mainLogger.warn(`无效的数字输入: ${value}，使用默认值 ${defaultValue}`);
+        return defaultValue;
+    }
+    
+    if (num < min) {
+        mainLogger.warn(`数字 ${num} 小于最小值 ${min}，使用最小值`);
+        return min;
+    }
+    
+    if (num > max) {
+        mainLogger.warn(`数字 ${num} 大于最大值 ${max}，使用最大值`);
+        return max;
+    }
+    
+    return num;
+}
+
+/**
+ * 验证字符串输入
+ * @param {*} value - 要验证的值
+ * @param {number} maxLength - 最大长度
+ * @param {string} defaultValue - 默认值
+ * @returns {string} 验证后的字符串
+ */
+function validateString(value, maxLength, defaultValue = '') {
+    if (typeof value !== 'string') {
+        mainLogger.warn(`无效的字符串输入，使用默认值`);
+        return defaultValue;
+    }
+    
+    if (value.length > maxLength) {
+        mainLogger.warn(`字符串长度 ${value.length} 超过最大值 ${maxLength}，将截断`);
+        return value.substring(0, maxLength);
+    }
+    
+    return value;
+}
+
+/**
+ * 验证设置对象
+ * @param {Object} settings - 要验证的设置
+ * @returns {Object} 验证后的设置
+ */
+function validateSettings(settings) {
+    const validated = { ...settings };
+    
+    // 验证数字类型的设置
+    validated.triggerThreshold = validateNumber(settings.triggerThreshold, 1, 1000, 5);
+    validated.maxTokens = validateNumber(settings.maxTokens, 100, 65536, 4000);
+    validated.temperature = validateNumber(settings.temperature, 0, 2, 0.7);
+    validated.topP = validateNumber(settings.topP, 0, 1, 1.0);
+    validated.presencePenalty = validateNumber(settings.presencePenalty, -2, 2, 0);
+    validated.frequencyPenalty = validateNumber(settings.frequencyPenalty, -2, 2, 0);
+    validated.entryPosition = validateNumber(settings.entryPosition, 0, 10, 4);
+    validated.entryDepth = validateNumber(settings.entryDepth, 0, 10, 1);
+    validated.diaryTriggerThreshold = validateNumber(settings.diaryTriggerThreshold, 1, 1000, 3);
+    validated.diaryMaxTokens = validateNumber(settings.diaryMaxTokens, 100, 65536, 2000);
+    validated.diaryTemperature = validateNumber(settings.diaryTemperature, 0, 2, 0.7);
+    
+    // 验证字符串类型的设置
+    validated.apiUrl = validateString(settings.apiUrl, 500, '');
+    validated.apiKey = validateString(settings.apiKey, 500, '');
+    validated.model = validateString(settings.model, 200, '');
+    validated.plotMasterPrompt = validateString(settings.plotMasterPrompt, 50000, defaultSettings.plotMasterPrompt);
+    validated.diaryTargetCharacter = validateString(settings.diaryTargetCharacter, 200, '');
+    validated.diaryMasterPrompt = validateString(settings.diaryMasterPrompt, 50000, defaultSettings.diaryMasterPrompt);
+    
+    // 验证数组
+    if (!Array.isArray(validated.entryKeywords)) {
+        mainLogger.warn('entryKeywords 不是数组，使用默认值');
+        validated.entryKeywords = defaultSettings.entryKeywords;
+    }
+    
+    // 验证布尔值
+    validated.enabled = Boolean(settings.enabled);
+    validated.diaryEnabled = Boolean(settings.diaryEnabled);
+    validated.silentMode = Boolean(settings.silentMode);
+    validated.diarySmartDetection = Boolean(settings.diarySmartDetection);
+    
+    // 验证枚举值
+    if (!['auto', 'manual'].includes(validated.runMode)) {
+        mainLogger.warn(`无效的runMode: ${validated.runMode}，使用默认值`);
+        validated.runMode = defaultSettings.runMode;
+    }
+    
+    if (!['auto', 'manual'].includes(validated.diaryRunMode)) {
+        mainLogger.warn(`无效的diaryRunMode: ${validated.diaryRunMode}，使用默认值`);
+        validated.diaryRunMode = defaultSettings.diaryRunMode;
+    }
+    
+    return validated;
+}
+
+/**
+ * Saves the current settings to extension settings.
+ */
+export function saveSettings() {
+    // 验证设置
+    currentSettings = validateSettings(currentSettings);
+    
+    extensionSettings[extensionName] = currentSettings;
+    saveSettingsDebounced();
+    mainLogger.info("设置已保存");
 }
 
 /**
