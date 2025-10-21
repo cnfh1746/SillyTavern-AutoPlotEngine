@@ -38,7 +38,7 @@ export async function createDrawer() {
       <div id="ape_extension_frame">
           <div class="inline-drawer">
               <div class="inline-drawer-toggle inline-drawer-header">
-                  <b><i class="fas fa-brain"></i> 自动剧情引擎</b>
+                  <b><i class="fas fa-brain"></i> AI组手</b>
                   <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
               </div>
               <div class="inline-drawer-content" style="display: none;">

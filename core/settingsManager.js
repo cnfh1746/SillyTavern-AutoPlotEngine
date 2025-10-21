@@ -486,7 +486,7 @@ export function initializeSettings() {
     if (modalSaveButton) {
         modalSaveButton.addEventListener('click', () => {
             saveAllFromUI();
-            toastr.success("设置已保存", "自动剧情引擎");
+            toastr.success("设置已保存", "AI组手");
             hideModal();
         });
     }

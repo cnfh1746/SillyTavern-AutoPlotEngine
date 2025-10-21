@@ -1,8 +1,8 @@
 {
     "name": "SillyTavern-AutoPlotEngine",
-    "display_name": "自动剧情引擎",
-    "version": "1.2.0",
-    "author": "cn1746",
+    "display_name": "AI组手",
+    "version": "6.6.6",
+    "author": "cnfh1746",
     "description": "一个全自动的后台剧情引擎，通过独立的AI分析上下文并生成宏观剧情大纲，以世界书的形式影响主AI，实现更连贯、更有逻辑的长线剧情。",
     "minSillyTavernVersion": "1.11.0",
     "requires": [],

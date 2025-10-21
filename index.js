@@ -29,7 +29,7 @@ jQuery(async () => {
                 // 2. Initialize loggers (must be after drawer/panel is loaded)
                 setTimeout(() => {
                     initLoggers();
-                    mainLogger.success("自动剧情引擎初始化完成");
+                    mainLogger.success("AI组手初始化完成");
                     mainLogger.info("日志系统已激活，所有操作将在此显示");
                 }, 600);
 

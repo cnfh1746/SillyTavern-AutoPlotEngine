@@ -16,8 +16,8 @@ const { toastr, TavernHelper } = window;
 
 // ==================== 优化7: 常量提取 ====================
 const CONSTANTS = {
-    ENTRY_COMMENT: "自动剧情大纲",
-    HISTORY_COMMENT: "剧情大纲历史版本",
+    ENTRY_COMMENT: "AI组手剧情大纲",
+    HISTORY_COMMENT: "AI组手历史版本",
     MAX_ALLOWED_TOKENS: 65536,
     MAX_HISTORY_VERSIONS: 5,
     API_RETRY_ATTEMPTS: 3,
@@ -448,7 +448,7 @@ async function updatePlotLorebook(outlineContent) {
             // 优化4: 内容去重检测
             if (existingEntry.content === outlineContent) {
                 plotLogger.info("剧情内容未变化，跳过更新");
-                toastr.info("剧情大纲内容未变化", "自动剧情引擎");
+                toastr.info("剧情大纲内容未变化", "AI组手");
                 return;
             }
             
@@ -600,15 +600,15 @@ export async function runPlotGenerationCycle() {
         plotLogger.info("步骤 4/4: 正在更新世界书...");
         if (plotOutline) {
             await updatePlotLorebook(plotOutline);
-            toastr.success("剧情大纲已成功生成并更新到世界书！", "自动剧情引擎");
+            toastr.success("剧情大纲已成功生成并更新到世界书！", "AI组手");
             plotLogger.success("========== 剧情生成周期完成 ==========");
         } else {
-            toastr.error("剧情大纲生成失败，API 未返回有效内容。", "自动剧情引擎");
+            toastr.error("剧情大纲生成失败，API 未返回有效内容。", "AI组手");
             plotLogger.error("剧情生成失败：API未返回内容");
         }
     } catch (error) {
         plotLogger.error("剧情生成周期发生错误", error.message);
-        toastr.error(`剧情生成失败: ${error.message}`, "自动剧情引擎");
+        toastr.error(`剧情生成失败: ${error.message}`, "AI组手");
     }
 }
 
