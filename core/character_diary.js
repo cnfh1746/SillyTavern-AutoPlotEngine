@@ -912,6 +912,7 @@ ${userInput}
     
     // 默认按角色名称处理
     const characterName = userInput;
+    const settings = getSettings(); // 重新获取settings
     mainLogger.info(`[角色日志] ========== 开始生成角色日志 ==========`);
     mainLogger.info(`[角色日志] 目标角色: ${characterName}`);
     
