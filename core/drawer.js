@@ -39,7 +39,7 @@ export async function createDrawer() {
     try {
         // 加载设置面板HTML到抽屉内容区
         const contentWrapper = $('#ape_extension_frame .inline-drawer-content');
-        const settingsPanelHtml = await $.get(`${extensionFolderPath}/settings.html?v=${Date.now()}`);
+        const settingsPanelHtml = await $.get(`/${extensionFolderPath}/settings.html?v=${Date.now()}`);
         contentWrapper.html(settingsPanelHtml);
         
         console.log(`[${extensionName}] Settings panel loaded successfully.`);
