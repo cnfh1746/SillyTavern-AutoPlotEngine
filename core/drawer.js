@@ -1,39 +1,19 @@
 /**
  * @file drawer.js
- * @description 创建扩展面板可折叠抽屉并管理弹出式设置对话框
+ * @description 创建扩展面板可折叠抽屉（标准内嵌方式）
  */
 
 const extensionName = "SillyTavern-AutoPlotEngine";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 
 /**
- * 显示弹出式设置对话框
- */
-export function showModal() {
-    const $overlay = $('#ape_modal_overlay');
-    if ($overlay.length > 0) {
-        $overlay.fadeIn(200);
-    }
-}
-
-/**
- * 隐藏弹出式设置对话框
- */
-export function hideModal() {
-    const $overlay = $('#ape_modal_overlay');
-    if ($overlay.length > 0) {
-        $overlay.fadeOut(200);
-    }
-}
-
-/**
- * 创建扩展面板中的可折叠抽屉
+ * 创建扩展面板中的可折叠抽屉（使用标准内嵌方式）
  */
 export async function createDrawer() {
     // 防止重复创建
     if ($("#ape_extension_frame").length > 0) return;
 
-    // 创建可折叠的抽屉框架
+    // 创建可折叠的抽屉框架（标准SillyTavern风格）
     const frameHtml = `
       <div id="ape_extension_frame">
           <div class="inline-drawer">
@@ -42,16 +22,7 @@ export async function createDrawer() {
                   <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
               </div>
               <div class="inline-drawer-content" style="display: none;">
-                  <div style="padding: 15px;">
-                      <div style="display: flex; flex-direction: column; gap: 10px;">
-                          <p style="margin: 0; color: var(--grey70, #999); font-size: 0.9em;">
-                              智能剧情生成与角色日志系统
-                          </p>
-                          <button id="ape_open_settings_button" class="menu_button" style="width: 100%;">
-                              <i class="fas fa-cog"></i> 打开设置
-                          </button>
-                      </div>
-                  </div>
+                  <!-- 设置面板将在这里加载 -->
               </div>
           </div>
       </div>
@@ -65,45 +36,25 @@ export async function createDrawer() {
     }
     $extensionsContainer.append(frameHtml);
 
-    // 加载模态对话框HTML
     try {
-        const modalHtml = await $.get(`${extensionFolderPath}/modal_settings.html`);
-        $('body').append(modalHtml);
+        // 加载设置面板HTML到抽屉内容区
+        const contentWrapper = $('#ape_extension_frame .inline-drawer-content');
+        const settingsPanelHtml = await $.get(`${extensionFolderPath}/settings.html?v=${Date.now()}`);
+        contentWrapper.html(settingsPanelHtml);
         
-        // 加载模态对话框CSS
-        const modalCssLink = document.createElement('link');
-        modalCssLink.rel = 'stylesheet';
-        modalCssLink.href = `${extensionFolderPath}/modal_style.css`;
-        document.head.appendChild(modalCssLink);
-        
+        console.log(`[${extensionName}] Settings panel loaded successfully.`);
+
+        // 初始化UI绑定（如果有的话）
+        if (typeof window.initializeAPEBindings === 'function') {
+            window.initializeAPEBindings();
+        }
+
     } catch (error) {
-        console.error(`[${extensionName}] Failed to load modal:`, error);
-        return;
+        console.error(`[${extensionName}] Failed to load settings panel:`, error);
+        $('#ape_extension_frame .inline-drawer-content').html(
+            '<p style="color:red; padding:10px;">错误：无法加载设置界面。</p>'
+        );
     }
 
-    // 绑定按钮点击事件
-    $('#ape_open_settings_button').on('click', () => {
-        showModal();
-    });
-
-    // 绑定模态对话框关闭事件
-    $('#ape_modal_close, #ape_modal_cancel').on('click', () => {
-        hideModal();
-    });
-
-    // 点击遮罩层关闭
-    $('#ape_modal_overlay').on('click', function(e) {
-        if (e.target === this) {
-            hideModal();
-        }
-    });
-
-    // ESC键关闭
-    $(document).on('keydown', function(e) {
-        if (e.key === 'Escape' && $('#ape_modal_overlay').is(':visible')) {
-            hideModal();
-        }
-    });
-
-    console.log(`[${extensionName}] Collapsible drawer with modal created successfully.`);
+    console.log(`[${extensionName}] Drawer created successfully with inline design.`);
 }

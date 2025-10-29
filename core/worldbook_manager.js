@@ -5,6 +5,7 @@
 
 import { mainLogger } from './logger.js';
 import { getSettings } from './settingsManager.js';
+import { safeParseJSON, callAI, MAX_TOKENS } from './utils.js';
 import { loadWorldInfo, saveWorldInfo } from "/scripts/world-info.js";
 
 const { toastr, TavernHelper } = window;
@@ -101,87 +102,28 @@ ${entriesText}
         
         mainLogger.info(`[世界书管理] 正在调用AI分析删除指令...`);
         
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`,
-            },
-            body: JSON.stringify(body),
+        // 使用统一的AI调用函数
+        const content = await callAI({
+            apiUrl: settings.apiUrl,
+            apiKey: settings.apiKey,
+            model: settings.model,
+            prompt: aiPrompt,
+            maxTokens: MAX_TOKENS.DELETE_ANALYSIS,
+            temperature: 0.2,
+            systemPrompt: '你是一个智能世界书管理助手，擅长分析用户的删除指令。只输出JSON格式的结果，不要添加任何解释。'
         });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content?.trim();
         
         if (!content) {
             throw new Error("AI未返回任何内容");
         }
         
-        mainLogger.info(`[世界书管理] AI响应: ${content}`);
+        mainLogger.info(`[世界书管理] AI响应: ${content.substring(0, 200)}...`);
         
-        // 4. 解析JSON - 增强容错性
-        let result;
-        try {
-            // 清理markdown代码块标记
-            let cleanContent = content.trim()
-                .replace(/```json\s*/g, '')
-                .replace(/```\s*/g, '')
-                .trim();
-            
-            // 提取JSON对象（支持多行）
-            const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-            let jsonText = jsonMatch ? jsonMatch[0] : cleanContent;
-            
-            // 尝试修复常见的JSON格式问题
-            // 1. 修复未闭合的字符串（常见于被截断的响应）
-            if (jsonText.includes('"') && !jsonText.endsWith('}')) {
-                mainLogger.warn(`[世界书管理] 检测到JSON可能不完整，尝试修复...`);
-                
-                // 查找最后一个完整的字段
-                const lastCompleteField = jsonText.lastIndexOf('",');
-                if (lastCompleteField > 0) {
-                    jsonText = jsonText.substring(0, lastCompleteField + 1) + '\n}';
-                    mainLogger.info(`[世界书管理] JSON已修复`);
-                }
-            }
-            
-            // 2. 尝试解析
-            try {
-                result = JSON.parse(jsonText);
-            } catch (parseError) {
-                // 如果还是失败，尝试提取uids数组
-                mainLogger.warn(`[世界书管理] 标准JSON解析失败，尝试提取关键信息...`);
-                
-                const uidsMatch = jsonText.match(/"uids"\s*:\s*\[([^\]]*)\]/);
-                const reasonMatch = jsonText.match(/"reason"\s*:\s*"([^"]*)"/);
-                
-                if (uidsMatch) {
-                    const uids = uidsMatch[1]
-                        .split(',')
-                        .map(s => s.trim())
-                        .filter(s => s)
-                        .map(s => parseInt(s));
-                    
-                    result = {
-                        uids: uids,
-                        reason: reasonMatch ? reasonMatch[1] : "部分解析",
-                        confirm_message: `已识别 ${uids.length} 个条目待删除`
-                    };
-                    
-                    mainLogger.success(`[世界书管理] 成功提取关键信息`);
-                } else {
-                    throw parseError;
-                }
-            }
-            
-        } catch (e) {
-            mainLogger.error(`[世界书管理] JSON解析失败: ${e.message}`);
-            mainLogger.error(`[世界书管理] 原始内容: ${content}`);
-            throw new Error(`无法解析AI响应为JSON: ${e.message}`);
+        // 4. 使用统一的JSON解析函数
+        const result = safeParseJSON(content, 'uids');
+        
+        if (!result) {
+            throw new Error("无法解析AI响应");
         }
         
         if (!result.uids || !Array.isArray(result.uids)) {
